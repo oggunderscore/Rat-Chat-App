@@ -24,5 +24,8 @@ async def handler(websocket):
         finally:
             # Remove client on disconnect
             clients.pop(websocket, None)  
-            
+
+async with websockets.serve(handler, "0.0.0.0", 8765):  # Listen on all interfaces
+print("WebSocket Server is running on ws://0.0.0.0:8765")
+await asyncio.Future()  # Keep server running indefinitely
             
