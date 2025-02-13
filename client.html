@@ -37,6 +37,15 @@
 
       // On close handler
       socket.onclose = () => {};
+
+      // Function to handle send message
+      function sendMessage() {
+        const msg = document.getElementById("message").value;
+        if (msg) {
+          socket.send(msg);
+          document.getElementById("message").value = "";
+        }
+      }
     </script>
   </body>
 </html>
