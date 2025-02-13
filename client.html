@@ -10,5 +10,21 @@
     <div id="chatbox"></div>
     <input type="text" id="message" placeholder="Type a message..." />
     <button onclick="sendMessage()">Send</button>
+
+    <script>
+      const serverIP = "ws://192.168.68.146:8765";
+      const socket = new WebSocket(serverIP);
+      let deviceName = localStorage.getItem("deviceName");
+
+      socket.onopen = () => {
+        console.log("Connected to WebSocket server.");
+
+        // Prompt for device name only if not stored in localStorage
+        if (!deviceName) {
+          deviceName = prompt("Enter your device name:");
+          localStorage.setItem("deviceName", deviceName);
+        }
+      };
+    </script>
   </body>
 </html>
