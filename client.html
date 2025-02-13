@@ -34,12 +34,15 @@
       };
       // On message handler
       socket.onmessage = (event) => {
+        // Grab data
         const data = JSON.parse(event.data);
         const chatbox = document.getElementById("chatbox");
 
+        // Dynamically create message container
         const msgElement = document.createElement("p");
         msgElement.classList.add("message");
 
+        // Check if message is from the sender or other
         if (data.sender === deviceName) {
           msgElement.classList.add("my-message");
           msgElement.innerHTML = `<b>You:</b> ${data.message}`;
@@ -48,6 +51,7 @@
           msgElement.innerHTML = `<b>${data.sender}:</b> ${data.message}`;
         }
 
+        // Append message to chatbox and scroll to bottom
         chatbox.appendChild(msgElement);
         chatbox.scrollTop = chatbox.scrollHeight;
       };
