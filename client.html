@@ -4,6 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebSocket Chat</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+      }
+      #chatbox {
+        width: 100%;
+        height: 300px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        padding: 10px;
+      }
+      .message {
+        padding: 5px;
+        margin: 5px 0;
+        border-radius: 5px;
+      }
+      .my-message {
+        background: #d1e7fd;
+        text-align: left;
+      }
+      .other-message {
+        background: #e1ffe1;
+        text-align: left;
+      }
+      input {
+        width: 80%;
+        padding: 10px;
+      }
+      button {
+        padding: 10px;
+      }
+    </style>
   </head>
   <body>
     <h2>WebSocket Chat</h2>
