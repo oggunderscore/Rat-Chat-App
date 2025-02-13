@@ -16,6 +16,7 @@
       const socket = new WebSocket(serverIP);
       let deviceName = localStorage.getItem("deviceName");
 
+      // On open handler
       socket.onopen = () => {
         console.log("Connected to WebSocket server.");
 
@@ -31,6 +32,11 @@
         document.getElementById("chatbox").innerHTML +=
           "<p><b>Connected as " + deviceName + "</b></p>";
       };
+      // On message handler
+      socket.onmessage = (event) => {};
+
+      // On close handler
+      socket.onclose = () => {};
     </script>
   </body>
 </html>
