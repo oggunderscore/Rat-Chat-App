@@ -33,7 +33,24 @@
           "<p><b>Connected as " + deviceName + "</b></p>";
       };
       // On message handler
-      socket.onmessage = (event) => {};
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const chatbox = document.getElementById("chatbox");
+
+        const msgElement = document.createElement("p");
+        msgElement.classList.add("message");
+
+        if (data.sender === deviceName) {
+          msgElement.classList.add("my-message");
+          msgElement.innerHTML = `<b>You:</b> ${data.message}`;
+        } else {
+          msgElement.classList.add("other-message");
+          msgElement.innerHTML = `<b>${data.sender}:</b> ${data.message}`;
+        }
+
+        chatbox.appendChild(msgElement);
+        chatbox.scrollTop = chatbox.scrollHeight;
+      };
 
       // On close handler
       socket.onclose = () => {
