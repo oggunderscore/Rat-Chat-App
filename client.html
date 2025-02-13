@@ -24,6 +24,12 @@
           deviceName = prompt("Enter your device name:");
           localStorage.setItem("deviceName", deviceName);
         }
+
+        // Send device name to the server upon connection
+        socket.send(deviceName);
+
+        document.getElementById("chatbox").innerHTML +=
+          "<p><b>Connected as " + deviceName + "</b></p>";
       };
     </script>
   </body>
