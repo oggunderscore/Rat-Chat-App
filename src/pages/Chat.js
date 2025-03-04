@@ -13,7 +13,7 @@ function Chat() {
 
   return (
     <div className="chat-container">
-      <h2>Chat Room</h2>
+      <h2>Rat Chat Room</h2>
       {/* Chat UI components go here */}
       <button onClick={handleLogout}>Logout</button>
     </div>
