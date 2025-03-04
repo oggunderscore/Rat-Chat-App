@@ -1,7 +1,9 @@
-# WebSocketProject
+# Rat Chat App
 
-Project for Web Security
+WebSocket Chat Project for Web Security
 Created by Kevin Nguyen
+
+## NOTE: README IS WIP, APP IS TRANSITIONING TO A WEBAPP INSTEAD OF A .HTML FILE. EVERYTHING BELOW IS OBSOLETE AT THE MOMENT. OLD FILES LOCATED IN /SRC/DOCS
 
 ## Usage
 
