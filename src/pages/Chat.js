@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { getDatabase, ref, push, onValue } from "firebase/database";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy,
+} from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import forge from "node-forge";
-import app from "../firebase"; // Import the initialized Firebase app
+import { db } from "../firebase";
 
 const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const auth = getAuth(app); // Use the initialized Firebase app
-  const database = getDatabase(app); // Use the initialized Firebase app
+  const auth = getAuth();
 
   const generateKeyPair = () => {
     const keypair = forge.pki.rsa.generateKeyPair(4096);
@@ -44,13 +49,15 @@ const Chat = () => {
   };
 
   useEffect(() => {
-    const messagesRef = ref(database, "messages");
-    onValue(messagesRef, (snapshot) => {
-      const data = snapshot.val();
-      const messagesList = data ? Object.values(data) : [];
+    const messagesRef = collection(db, "messages");
+    const q = query(messagesRef, orderBy("timestamp"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messagesList = snapshot.docs.map((doc) => doc.data());
       setMessages(messagesList);
     });
-  }, [database]);
+
+    return () => unsubscribe();
+  }, []);
 
   const sendMessage = async () => {
     const user = auth.currentUser;
@@ -65,16 +72,18 @@ const Chat = () => {
       forge.pki.publicKeyFromPem(publicKey)
     );
 
-    const messagesRef = ref(database, "messages");
-    await push(messagesRef, {
-      user: user.email,
-      encryptedMessage,
-      encryptedKey,
-      iv,
-      timestamp: new Date().toISOString(),
-    });
-
-    setMessage("");
+    try {
+      await addDoc(collection(db, "messages"), {
+        user: user.email,
+        encryptedMessage,
+        encryptedKey,
+        iv,
+        timestamp: new Date().toISOString(),
+      });
+      setMessage("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   };
 
   return (
