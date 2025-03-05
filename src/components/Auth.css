@@ -8,9 +8,23 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   text-align: center;
   color: #ccc;
+  border: 2px solid transparent; /* Transparent border for animation */
+  animation: glowing-border 1.5s infinite alternate ease-in-out;
 }
 
 .auth-container h2 {
   margin-bottom: 20px;
   font-size: 24px;
+}
+
+/* Animated glowing border */
+@keyframes glowing-border {
+  0% {
+    border-color: rgba(192, 0, 255, 0.4); /* Light purple */
+    box-shadow: 0 0 5px rgba(192, 0, 255, 0.4);
+  }
+  100% {
+    border-color: rgba(192, 0, 255, 0.8); /* Brighter purple */
+    box-shadow: 0 0 10px rgba(192, 0, 255, 0.8);
+  }
 }
