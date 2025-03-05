@@ -9,6 +9,7 @@ import {
 import { getAuth } from "firebase/auth";
 import forge from "node-forge";
 import { db } from "../firebase";
+import LogoutButton from "../components/LogoutButton"; // Import LogoutButton
 
 const Chat = () => {
   const [message, setMessage] = useState("");
@@ -89,6 +90,7 @@ const Chat = () => {
   return (
     <div>
       <h1>Chat App</h1>
+      <LogoutButton /> {/* Add LogoutButton */}
       <textarea value={message} onChange={(e) => setMessage(e.target.value)} />
       <button onClick={sendMessage}>Send</button>
       <div>
