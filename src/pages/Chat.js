@@ -38,16 +38,17 @@ const Chat = () => {
     return { encryptedMessage, encryptedKey, iv: forge.util.encode64(iv) };
   };
 
-  const decryptMessage = (encryptedMessage, encryptedKey, iv, privateKey) => {
-    const key = privateKey.decrypt(forge.util.decode64(encryptedKey));
-    const decipher = forge.cipher.createDecipher("AES-CBC", key);
-    decipher.start({ iv: forge.util.decode64(iv) });
-    decipher.update(
-      forge.util.createBuffer(forge.util.decode64(encryptedMessage))
-    );
-    decipher.finish();
-    return decipher.output.toString();
-  };
+  // TODO: To be used soon
+  // const decryptMessage = (encryptedMessage, encryptedKey, iv, privateKey) => {
+  //   const key = privateKey.decrypt(forge.util.decode64(encryptedKey));
+  //   const decipher = forge.cipher.createDecipher("AES-CBC", key);
+  //   decipher.start({ iv: forge.util.decode64(iv) });
+  //   decipher.update(
+  //     forge.util.createBuffer(forge.util.decode64(encryptedMessage))
+  //   );
+  //   decipher.finish();
+  //   return decipher.output.toString();
+  // };
 
   useEffect(() => {
     const messagesRef = collection(db, "messages");
@@ -67,7 +68,7 @@ const Chat = () => {
       return;
     }
 
-    const { publicKey, privateKey } = generateKeyPair();
+    const { publicKey } = generateKeyPair(); // Previously had publicKey, privateKey
     const { encryptedMessage, encryptedKey, iv } = encryptMessage(
       message,
       forge.pki.publicKeyFromPem(publicKey)

@@ -1,9 +1,7 @@
 import React, { useState } from "react";
-import { getAuth, signOut } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import CryptoJS from "crypto-js";
 import { db } from "../firebase";
-import { CSSTransition } from "react-transition-group";
 import "./Auth.css";
 
 const Auth = () => {
@@ -11,7 +9,6 @@ const Auth = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const auth = getAuth();
   const MAX_ATTEMPTS = 5;
   const LOCK_TIME = 30 * 60 * 1000;
 
@@ -87,17 +84,18 @@ const Auth = () => {
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      localStorage.setItem("isLoggedIn", "false");
-      alert("User signed out successfully");
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Error signing out:", error);
-      setError("Error signing out. Please try again.");
-    }
-  };
+  // Currently handled by LogoutButton.js
+  // const handleSignOut = async () => {
+  //   try {
+  //     await signOut(auth);
+  //     localStorage.setItem("isLoggedIn", "false");
+  //     alert("User signed out successfully");
+  //     window.location.href = "/login";
+  //   } catch (error) {
+  //     console.error("Error signing out:", error);
+  //     setError("Error signing out. Please try again.");
+  //   }
+  // };
 
   return (
     <div className="auth-container">
