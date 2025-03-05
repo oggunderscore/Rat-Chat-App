@@ -15,6 +15,17 @@
   font-weight: 500;
 }
 
+/* Customize toast background */
+.Toastify__toast {
+  background: #2e2e2e !important; /* Dark gray */
+  color: white !important; /* White text */
+}
+
+/* Customize progress bar */
+.Toastify__progress-bar {
+  background: #ff1ee5 !important;
+}
+
 /* Improve button styles */
 button {
   background-color: #ff1ee5; /* Bright modern blue */

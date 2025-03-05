@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import CryptoJS from "crypto-js";
 import { db } from "../firebase";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 import "./Auth.css";
 
 const Auth = () => {
@@ -20,6 +22,7 @@ const Auth = () => {
     e.preventDefault();
     if (!username || !password) {
       setError("All fields are required");
+      toast.error("All fields are required");
       return;
     }
     const hashedPassword = hashPassword(password);
@@ -31,12 +34,13 @@ const Auth = () => {
         lastLoggedIn: new Date().toISOString(),
         loginAttempts: 0,
       });
-      alert("User registered successfully");
+      toast.success("User registered successfully");
       setError("");
       setIsSignUp(false);
     } catch (error) {
       console.error("Error signing up:", error);
       setError("Error signing up. Please try again.");
+      toast.error("Error signing up. Please try again.");
     }
   };
 
@@ -49,6 +53,7 @@ const Auth = () => {
         const userData = userDoc.data();
         if (userData.lockUntil && userData.lockUntil > Date.now()) {
           setError("Account is locked. Try again later.");
+          toast.error("Account is locked. Try again later.");
           return;
         }
         if (userData.password === hashedPassword) {
@@ -57,9 +62,11 @@ const Auth = () => {
             lastLoggedIn: new Date().toISOString(),
           });
           localStorage.setItem("isLoggedIn", "true");
-          alert("User signed in successfully");
+          toast.success("User signed in successfully");
           setError("");
-          window.location.href = "/chat";
+          setTimeout(() => {
+            window.location.href = "/chat";
+          }, 1000);
         } else {
           const attempts = (userData.loginAttempts || 0) + 1;
           if (attempts >= MAX_ATTEMPTS) {
@@ -68,39 +75,30 @@ const Auth = () => {
               lockUntil: Date.now() + LOCK_TIME,
             });
             setError("Account locked due to too many failed attempts.");
+            toast.error("Account locked due to too many failed attempts.");
           } else {
             await updateDoc(doc(db, "users", username), {
               loginAttempts: attempts,
             });
             setError("Invalid username or password");
+            toast.error("Invalid username or password");
           }
         }
       } else {
         setError("Invalid username or password");
+        toast.error("Invalid username or password");
       }
     } catch (error) {
       console.error("Error signing in:", error);
       setError("Error signing in. Please try again.");
+      toast.error("Error signing in. Please try again.");
     }
   };
 
-  // Currently handled by LogoutButton.js
-  // const handleSignOut = async () => {
-  //   try {
-  //     await signOut(auth);
-  //     localStorage.setItem("isLoggedIn", "false");
-  //     alert("User signed out successfully");
-  //     window.location.href = "/login";
-  //   } catch (error) {
-  //     console.error("Error signing out:", error);
-  //     setError("Error signing out. Please try again.");
-  //   }
-  // };
-
   return (
     <div className="auth-container">
+      <ToastContainer position="top-right" autoClose={5000} />
       <h2>{isSignUp ? "Sign Up" : "Sign In"}</h2>
-      {error && <p className="error">{error}</p>}
       <form>
         <div className="form-group">
           <label>Username</label>
