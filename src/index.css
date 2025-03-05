@@ -1,13 +1,45 @@
+/* Apply dark theme to the entire site */
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  padding: 0;
+  background-color: #1e1e1e; /* Dark Gray */
+  color: #e0e0e0; /* Light Gray Text */
+  font-family: "Poppins", sans-serif; /* Modern font */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Improve text readability */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #ffffff; /* Pure white for headings */
+  font-weight: 600;
+}
+
+p,
+span,
+label,
+input,
+button {
+  color: #d0d0d0; /* Light gray text */
+}
+
+/* Make links stand out */
+a {
+  color: #ffffff; /* Modern blue */
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Style code blocks if needed */
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: "Fira Code", monospace;
+  color: #ffcc66; /* Soft yellow for contrast */
 }

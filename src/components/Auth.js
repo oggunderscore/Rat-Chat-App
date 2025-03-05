@@ -3,15 +3,17 @@ import { getAuth, signOut } from "firebase/auth";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import CryptoJS from "crypto-js";
 import { db } from "../firebase";
+import { CSSTransition } from "react-transition-group";
 import "./Auth.css";
 
 const Auth = () => {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const auth = getAuth();
   const MAX_ATTEMPTS = 5;
-  const LOCK_TIME = 30 * 60 * 1000; // 30 minutes
+  const LOCK_TIME = 30 * 60 * 1000;
 
   const hashPassword = (password) => {
     return CryptoJS.SHA256(password).toString();
@@ -19,7 +21,10 @@ const Auth = () => {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    console.log("Sign Up button clicked");
+    if (!username || !password) {
+      setError("All fields are required");
+      return;
+    }
     const hashedPassword = hashPassword(password);
     try {
       await setDoc(doc(db, "users", username), {
@@ -31,6 +36,7 @@ const Auth = () => {
       });
       alert("User registered successfully");
       setError("");
+      setIsSignUp(false);
     } catch (error) {
       console.error("Error signing up:", error);
       setError("Error signing up. Please try again.");
@@ -39,26 +45,20 @@ const Auth = () => {
 
   const handleSignIn = async (e) => {
     e.preventDefault();
-    console.log("Sign In button clicked");
     const hashedPassword = hashPassword(password);
     try {
       const userDoc = await getDoc(doc(db, "users", username));
-      console.log(userDoc.exists());
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        console.log(userData);
         if (userData.lockUntil && userData.lockUntil > Date.now()) {
           setError("Account is locked. Try again later.");
           return;
         }
-        console.log(userData.password, hashedPassword);
         if (userData.password === hashedPassword) {
-          console.log("User signed in successfully");
           await updateDoc(doc(db, "users", username), {
             loginAttempts: 0,
-            lastLoggedIn: new Date().toISOString(), // Update lastLoggedIn field
+            lastLoggedIn: new Date().toISOString(),
           });
-          console.log("User login attempts reset and lastLoggedIn updated");
           localStorage.setItem("isLoggedIn", "true");
           alert("User signed in successfully");
           setError("");
@@ -70,9 +70,7 @@ const Auth = () => {
               loginAttempts: attempts,
               lockUntil: Date.now() + LOCK_TIME,
             });
-            setError(
-              "Account locked due to too many failed attempts. Try again later."
-            );
+            setError("Account locked due to too many failed attempts.");
           } else {
             await updateDoc(doc(db, "users", username), {
               loginAttempts: attempts,
@@ -90,7 +88,6 @@ const Auth = () => {
   };
 
   const handleSignOut = async () => {
-    console.log("Sign Out button clicked");
     try {
       await signOut(auth);
       localStorage.setItem("isLoggedIn", "false");
@@ -104,7 +101,7 @@ const Auth = () => {
 
   return (
     <div className="auth-container">
-      <h2>Authentication</h2>
+      <h2>{isSignUp ? "Sign Up" : "Sign In"}</h2>
       {error && <p className="error">{error}</p>}
       <form>
         <div className="form-group">
@@ -113,7 +110,7 @@ const Auth = () => {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username"
+            placeholder="Enter your username"
           />
         </div>
         <div className="form-group">
@@ -122,12 +119,18 @@ const Auth = () => {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
+            placeholder="Enter your password"
           />
         </div>
-        <button onClick={handleSignUp}>Sign Up</button>
-        <button onClick={handleSignIn}>Sign In</button>
-        <button onClick={handleSignOut}>Sign Out</button>
+        <button onClick={isSignUp ? handleSignUp : handleSignIn}>
+          {isSignUp ? "Sign Up" : "Login"}
+        </button>
+        <p>
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+          <span className="toggle-link" onClick={() => setIsSignUp(!isSignUp)}>
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </span>
+        </p>
       </form>
     </div>
   );

@@ -1,39 +1,123 @@
+/* Apply dark theme to the entire site */
 body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    color: #333;
+  margin: 0;
+  font-family: "Poppins", sans-serif; /* Modern font */
+  background-color: #1e1e1e; /* Dark gray */
+  color: #e0e0e0; /* Light gray text */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h2 {
-    color: #333;
+/* Headings with improved contrast */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #ffffff;
+  font-weight: 600;
 }
 
-input[type="text"],
-input[type="password"] {
-    width: 100%;
-    padding: 10px;
-    margin: 10px 0;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-}
-
+/* Improved text readability */
+p,
+span,
+label,
+input,
 button {
-    background-color: #007bff;
-    color: white;
-    padding: 10px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
+  color: #d0d0d0;
 }
 
-button:hover {
-    background-color: #0056b3;
+/* Modernized input fields */
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0px;
+  border: 1px solid #444;
+  background: #2a2a2a;
+  color: white;
+  border-radius: 5px;
+  font-size: 16px;
+  outline: none;
 }
 
+input[type="text"]:focus,
+input[type="password"]:focus {
+  border-color: #ff1ee5; /* Highlight effect */
+}
+
+/* Stylish buttons */
+button {
+  background-color: #ff1ee5;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Chatbox style */
 #chatbox {
-    background-color: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 10px;
+  background-color: #2e2e2e;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 15px;
+  font-size: 14px;
+  color: #d0d0d0;
+}
+
+/* Links with modern hover effects */
+a {
+  color: #1e90ff;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Smooth UI transitions */
+* {
+  transition: all 0.3s ease-in-out;
+}
+
+.form-group {
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.form-group input {
+  width: calc(100% - 20px); /* Adjust width to add padding */
+  padding: 10px;
+  background: #1e1e1e;
+  border: 1px solid #555;
+  color: white;
+  border-radius: 5px;
+  font-size: 14px;
+  margin-right: 10px; /* Add margin to the right */
+}
+
+.toggle-link {
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.toggle-link:hover {
+  text-decoration: underline;
+}
+
+.error {
+  color: red;
+  margin-bottom: 15px;
 }
