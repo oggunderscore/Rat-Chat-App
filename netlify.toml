@@ -6,4 +6,4 @@
   NODE_VERSION = "20.18.1"
 
 [site]
-  name = "new-site-name"
+  name = "rat-chat-app"

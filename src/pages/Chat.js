@@ -2,12 +2,13 @@ import React, { useState, useEffect } from "react";
 import { getDatabase, ref, push, onValue } from "firebase/database";
 import { getAuth } from "firebase/auth";
 import forge from "node-forge";
+import app from "../firebase"; // Import the initialized Firebase app
 
 const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const auth = getAuth();
-  const database = getDatabase();
+  const auth = getAuth(app); // Use the initialized Firebase app
+  const database = getDatabase(app); // Use the initialized Firebase app
 
   const generateKeyPair = () => {
     const keypair = forge.pki.rsa.generateKeyPair(4096);
