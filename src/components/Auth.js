@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import CryptoJS from "crypto-js";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./Auth.css";
@@ -9,7 +13,10 @@ import "./Auth.css";
 const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState(""); // New state for email
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const MAX_ATTEMPTS = 5;
   const LOCK_TIME = 30 * 60 * 1000;
 
@@ -19,73 +26,99 @@ const Auth = () => {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    if (!username || !password) {
+    if (!username || !email || !password) {
       toast.error("All fields are required");
       return;
     }
+    setLoading(true);
     const hashedPassword = hashPassword(password);
     try {
-      await setDoc(doc(db, "users", username), {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+      await setDoc(doc(db, "users", user.uid), {
         username,
+        email,
         password: hashedPassword,
         createdAt: new Date().toISOString(),
         lastLoggedIn: new Date().toISOString(),
         loginAttempts: 0,
       });
       toast.success("User registered successfully");
+      setLoading(false);
       setIsSignUp(false);
     } catch (error) {
-      toast.error("Error signing up. Please try again.");
+      toast.error("Error signing up. Please try again. " + error.message);
+      setLoading(false);
     }
   };
 
   const handleSignIn = async (e) => {
     e.preventDefault();
+    setLoading(true);
     const hashedPassword = hashPassword(password);
     try {
-      const userDoc = await getDoc(doc(db, "users", username));
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const user = userCredential.user;
+      const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.lockUntil && userData.lockUntil > Date.now()) {
           toast.error("Account is locked. Try again later.");
+          setLoading(false);
           return;
         }
         if (userData.password === hashedPassword) {
-          await updateDoc(doc(db, "users", username), {
+          await updateDoc(doc(db, "users", user.uid), {
             loginAttempts: 0,
             lastLoggedIn: new Date().toISOString(),
           });
           localStorage.setItem("isLoggedIn", "true");
           toast.success("User signed in successfully");
+          setLoading(false);
           setTimeout(() => {
             window.location.href = "/chat";
           }, 1000);
         } else {
           const attempts = (userData.loginAttempts || 0) + 1;
           if (attempts >= MAX_ATTEMPTS) {
-            await updateDoc(doc(db, "users", username), {
+            await updateDoc(doc(db, "users", user.uid), {
               loginAttempts: attempts,
               lockUntil: Date.now() + LOCK_TIME,
             });
             toast.error("Account locked due to too many failed attempts.");
           } else {
-            await updateDoc(doc(db, "users", username), {
+            await updateDoc(doc(db, "users", user.uid), {
               loginAttempts: attempts,
             });
-            toast.error("Invalid username or password");
+            toast.error("Invalid email or password");
           }
+          setLoading(false);
         }
       } else {
-        toast.error("Invalid username or password");
+        toast.error("Invalid email or password");
+        setLoading(false);
       }
     } catch (error) {
       toast.error("Error signing in. Please try again.");
+      setLoading(false);
     }
   };
 
   return (
     <div className="auth-container">
       <ToastContainer position="top-right" autoClose={5000} />
+      <header className="app-header">
+        <h1>Rat Chat</h1>
+        <p>by ogg_</p>
+      </header>
       <h2>{isSignUp ? "Sign Up" : "Sign In"}</h2>
       <form>
         <div className="form-group">
@@ -97,6 +130,17 @@ const Auth = () => {
             placeholder="Enter your username"
           />
         </div>
+        {isSignUp && (
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+            />
+          </div>
+        )}
         <div className="form-group">
           <label>Password</label>
           <input
@@ -106,8 +150,17 @@ const Auth = () => {
             placeholder="Enter your password"
           />
         </div>
-        <button onClick={isSignUp ? handleSignUp : handleSignIn}>
-          {isSignUp ? "Sign Up" : "Login"}
+        <button
+          onClick={isSignUp ? handleSignUp : handleSignIn}
+          disabled={loading}
+        >
+          {loading ? (
+            <span className="spinner"></span>
+          ) : isSignUp ? (
+            "Sign Up"
+          ) : (
+            "Login"
+          )}
         </button>
         <p>
           {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}

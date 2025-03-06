@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { Route, Routes, Navigate } from "react-router-dom";
 import Auth from "./components/Auth";
-import Chat from "./pages/Chat";
+import Chat from "./components/Chat";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
@@ -16,10 +16,6 @@ function App() {
   return (
     <div className="app-container">
       <ToastContainer position="top-right" autoClose={5000} />
-      <header className="app-header">
-        <h1>Rat Chat</h1>
-        <p>by ogg_</p>
-      </header>
       <Routes>
         <Route
           path="/login"
