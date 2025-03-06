@@ -10,7 +10,6 @@ const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const MAX_ATTEMPTS = 5;
   const LOCK_TIME = 30 * 60 * 1000;
 
@@ -21,7 +20,6 @@ const Auth = () => {
   const handleSignUp = async (e) => {
     e.preventDefault();
     if (!username || !password) {
-      setError("All fields are required");
       toast.error("All fields are required");
       return;
     }
@@ -35,11 +33,8 @@ const Auth = () => {
         loginAttempts: 0,
       });
       toast.success("User registered successfully");
-      setError("");
       setIsSignUp(false);
     } catch (error) {
-      console.error("Error signing up:", error);
-      setError("Error signing up. Please try again.");
       toast.error("Error signing up. Please try again.");
     }
   };
@@ -52,7 +47,6 @@ const Auth = () => {
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.lockUntil && userData.lockUntil > Date.now()) {
-          setError("Account is locked. Try again later.");
           toast.error("Account is locked. Try again later.");
           return;
         }
@@ -63,7 +57,6 @@ const Auth = () => {
           });
           localStorage.setItem("isLoggedIn", "true");
           toast.success("User signed in successfully");
-          setError("");
           setTimeout(() => {
             window.location.href = "/chat";
           }, 1000);
@@ -74,23 +67,18 @@ const Auth = () => {
               loginAttempts: attempts,
               lockUntil: Date.now() + LOCK_TIME,
             });
-            setError("Account locked due to too many failed attempts.");
             toast.error("Account locked due to too many failed attempts.");
           } else {
             await updateDoc(doc(db, "users", username), {
               loginAttempts: attempts,
             });
-            setError("Invalid username or password");
             toast.error("Invalid username or password");
           }
         }
       } else {
-        setError("Invalid username or password");
         toast.error("Invalid username or password");
       }
     } catch (error) {
-      console.error("Error signing in:", error);
-      setError("Error signing in. Please try again.");
       toast.error("Error signing in. Please try again.");
     }
   };
