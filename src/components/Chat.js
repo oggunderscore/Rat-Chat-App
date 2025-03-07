@@ -51,6 +51,14 @@ const Chat = () => {
     setMessage((prevMessage) => prevMessage + emojiObject.emoji);
   };
 
+  const formatMessage = (text) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>") // Bold **text**
+      .replace(/\*(.*?)\*/g, "<i>$1</i>") // Italic *text*
+      .replace(/__(.*?)__/g, "<u>$1</u>") // Underline __text__
+      .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>'); // Links [text](url)
+  };
+
   return (
     <div className="chat-app">
       <Sidebar />
@@ -62,7 +70,10 @@ const Chat = () => {
         <div className="chat-messages">
           {messages.map((msg, index) => (
             <div key={index} className="message">
-              <span className="username">{msg.sender}</span>: {msg.message}
+              <span className="username">{msg.sender}</span>:{" "}
+              <span
+                dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
+              ></span>
             </div>
           ))}
         </div>
@@ -70,7 +81,7 @@ const Chat = () => {
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type a message..."
+            placeholder="Type a message... (Use *italic*, **bold**, __underline__, or [link](https://example.com))"
           />
           <button onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
             😀
