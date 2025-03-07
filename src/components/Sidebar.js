@@ -1,12 +1,8 @@
 import React from "react";
-import { getAuth } from "firebase/auth";
 import "./Chat.css";
 import LogoutButton from "./LogoutButton";
 
 const Sidebar = ({ setCurrentChat }) => {
-  const auth = getAuth();
-  const user = auth.currentUser;
-
   // Dummy user list for direct messages (to be replaced with real data)
   const users = ["Alice", "Bob", "Charlie"];
 
