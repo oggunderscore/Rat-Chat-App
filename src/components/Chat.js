@@ -18,7 +18,7 @@ const Chat = () => {
     setUser(username);
 
     // Connect to the WebSocket server running on the Raspberry Pi
-    socketRef.current = new WebSocket("ws://47.154.96.241:8765");
+    socketRef.current = new WebSocket("wss://47.154.96.241:8765");
 
     // Send username to the server upon connection
     socketRef.current.onopen = () => {
