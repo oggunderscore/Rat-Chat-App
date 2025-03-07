@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
+import EmojiPicker from "emoji-picker-react";
 
 const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [user, setUser] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const socketRef = useRef(null);
 
   useEffect(() => {
-    // Retrieve username from local storage (or auth system)
     const username = localStorage.getItem("username");
     if (!username) {
       console.log("No username found, redirecting to login.");
@@ -17,21 +18,17 @@ const Chat = () => {
     }
     setUser(username);
 
-    // Connect to the WebSocket server running on the Raspberry Pi
-    socketRef.current = new WebSocket("wss://47.154.96.241:8765");
+    socketRef.current = new WebSocket("ws://47.154.96.241:8765");
 
-    // Send username to the server upon connection
     socketRef.current.onopen = () => {
       socketRef.current.send(JSON.stringify({ username }));
     };
 
-    // Listen for incoming messages
     socketRef.current.onmessage = (event) => {
       const receivedMessage = JSON.parse(event.data);
       setMessages((prevMessages) => [...prevMessages, receivedMessage]);
     };
 
-    // Clean up on unmount
     return () => {
       if (socketRef.current) {
         socketRef.current.close();
@@ -48,6 +45,10 @@ const Chat = () => {
 
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
+  };
+
+  const handleEmojiClick = (emojiObject) => {
+    setMessage((prevMessage) => prevMessage + emojiObject.emoji);
   };
 
   return (
@@ -71,6 +72,14 @@ const Chat = () => {
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Type a message..."
           />
+          <button onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
+            😀
+          </button>
+          {showEmojiPicker && (
+            <div className="emoji-picker">
+              <EmojiPicker onEmojiClick={handleEmojiClick} />
+            </div>
+          )}
           <button onClick={sendMessage} disabled={!user}>
             Send
           </button>
