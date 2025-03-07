@@ -81,6 +81,7 @@ const Auth = () => {
             lastLoggedIn: new Date().toISOString(),
           });
           localStorage.setItem("isLoggedIn", "true");
+          localStorage.setItem("username", userData.username);
           toast.success("User signed in successfully");
           setLoading(false);
           setTimeout(() => {
