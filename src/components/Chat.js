@@ -100,7 +100,6 @@ const Chat = () => {
       <div className="chat-container">
         <div className="chat-header">
           <h2>#general</h2>
-          <p>Logged in as: {user}</p>
         </div>
         <div className="chat-messages">
           {messages.map((msg, index) => (
