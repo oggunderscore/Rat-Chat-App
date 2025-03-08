@@ -1,14 +1,12 @@
-/* Apply dark theme to the entire site */
 body {
   margin: 0;
-  font-family: "Poppins", sans-serif; /* Modern font */
-  background-color: #1e1e1e; /* Dark gray */
-  color: #e0e0e0; /* Light gray text */
+  font-family: "Fira Code", "Courier New", monospace;
+  background-color: #1e1e1e;
+  color: #e0e0e0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Headings with improved contrast */
 h1,
 h2,
 h3,
@@ -19,7 +17,6 @@ h6 {
   font-weight: 600;
 }
 
-/* Improved text readability */
 p,
 span,
 label,
@@ -28,7 +25,6 @@ button {
   color: #d0d0d0;
 }
 
-/* Modernized input fields */
 input[type="text"],
 input[type="password"],
 input[type="email"] {
