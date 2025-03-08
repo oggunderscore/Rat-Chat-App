@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
-import EmojiPicker from "emoji-picker-react";
+import "emoji-picker-element";
+import Tooltip from "@mui/material/Tooltip";
 
 const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [user, setUser] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef(null);
+  const emojiPickerRef = useRef(null);
 
   useEffect(() => {
     const username = localStorage.getItem("username");
@@ -22,6 +25,11 @@ const Chat = () => {
 
     socketRef.current.onopen = () => {
       socketRef.current.send(JSON.stringify({ username }));
+      setIsConnected(true);
+    };
+
+    socketRef.current.onclose = () => {
+      setIsConnected(false);
     };
 
     socketRef.current.onmessage = (event) => {
@@ -37,7 +45,7 @@ const Chat = () => {
   }, []);
 
   const sendMessage = () => {
-    if (message.trim() === "" || !socketRef.current) return;
+    if (message.trim() === "" || !socketRef.current || !isConnected) return;
 
     const messageData = {
       message: message.trim(),
@@ -47,9 +55,36 @@ const Chat = () => {
     setMessage("");
   };
 
-  const handleEmojiClick = (emojiObject) => {
-    setMessage((prevMessage) => prevMessage + emojiObject.emoji);
+  const handleEmojiClick = (event) => {
+    setMessage((prevMessage) => prevMessage + event.detail.unicode);
   };
+
+  const handleClickOutside = (event) => {
+    if (
+      emojiPickerRef.current &&
+      !emojiPickerRef.current.contains(event.target)
+    ) {
+      setShowEmojiPicker(false);
+    }
+  };
+
+  useEffect(() => {
+    const picker = emojiPickerRef.current;
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+      if (picker) {
+        picker.addEventListener("emoji-click", handleEmojiClick);
+      }
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      if (picker) {
+        picker.removeEventListener("emoji-click", handleEmojiClick);
+      }
+    };
+  }, [showEmojiPicker]);
 
   const formatMessage = (text) => {
     return text
@@ -83,17 +118,30 @@ const Chat = () => {
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Type a message... (Use *italic*, **bold**, __underline__, or [link](https://example.com))"
           />
-          <button onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
-            😀
-          </button>
-          {showEmojiPicker && (
-            <div className="emoji-picker">
-              <EmojiPicker onEmojiClick={handleEmojiClick} />
-            </div>
-          )}
-          <button onClick={sendMessage} disabled={!user}>
-            Send
-          </button>
+          <div
+            className="emoji-container"
+            style={{ position: "relative", display: "inline-block" }}
+          >
+            <button onClick={() => setShowEmojiPicker((prev) => !prev)}>
+              😀
+            </button>
+            {showEmojiPicker && (
+              <div ref={emojiPickerRef} className="emoji-picker-overlay">
+                <emoji-picker></emoji-picker>
+              </div>
+            )}
+          </div>
+          <Tooltip
+            title={!isConnected ? "Not connected to WebSocket Server" : ""}
+            arrow
+            placement="top"
+          >
+            <span>
+              <button onClick={sendMessage} disabled={!user || !isConnected}>
+                Send
+              </button>
+            </span>
+          </Tooltip>
         </div>
       </div>
     </div>
