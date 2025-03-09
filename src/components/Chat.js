@@ -7,9 +7,10 @@ const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [user, setUser] = useState(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const socketRef = useRef(null);
+  const fileInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
 
   useEffect(() => {
@@ -21,7 +22,7 @@ const Chat = () => {
     }
     setUser(username);
 
-    socketRef.current = new WebSocket("ws://47.154.96.241:8765");
+    socketRef.current = new WebSocket("ws://localhost:8765"); // was 47.154.96.241
 
     socketRef.current.onopen = () => {
       socketRef.current.send(JSON.stringify({ username }));
@@ -33,8 +34,12 @@ const Chat = () => {
     };
 
     socketRef.current.onmessage = (event) => {
-      const receivedMessage = JSON.parse(event.data);
-      setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+      if (typeof event.data === "string") {
+        const receivedMessage = JSON.parse(event.data);
+        setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+      } else {
+        handleFileDownload(event.data);
+      }
     };
 
     return () => {
@@ -46,11 +51,7 @@ const Chat = () => {
 
   const sendMessage = () => {
     if (message.trim() === "" || !socketRef.current || !isConnected) return;
-
-    const messageData = {
-      message: message.trim(),
-    };
-
+    const messageData = { message: message.trim() };
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
   };
@@ -86,12 +87,29 @@ const Chat = () => {
     };
   }, [showEmojiPicker]);
 
-  const formatMessage = (text) => {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>") // Bold **text**
-      .replace(/\*(.*?)\*/g, "<i>$1</i>") // Italic *text*
-      .replace(/__(.*?)__/g, "<u>$1</u>") // Underline __text__
-      .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>'); // Links [text](url)
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file || !isConnected) return;
+
+    const reader = new FileReader();
+    reader.readAsArrayBuffer(file);
+    reader.onload = () => {
+      socketRef.current.send(reader.result);
+      console.log("File uploaded:", file.name);
+    };
+  };
+
+  const requestFileDownload = (filename) => {
+    if (!socketRef.current || !isConnected) return;
+    socketRef.current.send(JSON.stringify({ type: "request_file", filename }));
+  };
+
+  const handleFileDownload = (binaryData) => {
+    const blob = new Blob([binaryData], { type: "application/octet-stream" });
+    const link = document.createElement("a");
+    link.href = window.URL.createObjectURL(blob);
+    link.download = `downloaded_file_${Date.now()}.bin`;
+    link.click();
   };
 
   return (
@@ -105,9 +123,13 @@ const Chat = () => {
           {messages.map((msg, index) => (
             <div key={index} className="message">
               <span className="username">{msg.sender}</span>:{" "}
-              <span
-                dangerouslySetInnerHTML={{ __html: formatMessage(msg.message) }}
-              ></span>
+              {msg.type === "file_uploaded" ? (
+                <button onClick={() => requestFileDownload(msg.filename)}>
+                  Download {msg.filename}
+                </button>
+              ) : (
+                <span>{msg.message}</span>
+              )}
             </div>
           ))}
         </div>
@@ -141,6 +163,15 @@ const Chat = () => {
               </button>
             </span>
           </Tooltip>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            style={{ display: "none" }}
+          />
+          <button onClick={() => fileInputRef.current.click()}>
+            📎 Upload File
+          </button>
         </div>
       </div>
     </div>
