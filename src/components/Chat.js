@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../components/Sidebar";
-import "emoji-picker-element";
+import EmojiPicker from "../components/EmojiPicker";
+import AttachFileButton from "../components/AttachFileButton";
 import Tooltip from "@mui/material/Tooltip";
 
 const Chat = () => {
@@ -8,10 +9,9 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [user, setUser] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [currentChat, setCurrentChat] = useState("general");
   const socketRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const emojiPickerRef = useRef(null);
 
   useEffect(() => {
     const username = localStorage.getItem("username");
@@ -25,20 +25,36 @@ const Chat = () => {
     socketRef.current = new WebSocket("ws://localhost:8765"); // was 47.154.96.241
 
     socketRef.current.onopen = () => {
-      socketRef.current.send(JSON.stringify({ username }));
+      console.log("WebSocket connection opened");
+      socketRef.current.send(
+        JSON.stringify({ username, chatroom: currentChat })
+      );
       setIsConnected(true);
     };
 
     socketRef.current.onclose = () => {
+      console.log("WebSocket connection closed");
       setIsConnected(false);
     };
 
     socketRef.current.onmessage = (event) => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
-        setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+        console.log("Received message:", receivedMessage);
+        if (receivedMessage.type === "online_users") {
+          setOnlineUsers(receivedMessage.users); // Update online users
+        } else if (receivedMessage.chatroom === currentChat) {
+          if (receivedMessage.type === "file_uploaded") {
+            handleFileDownload(
+              receivedMessage.fileData,
+              receivedMessage.filename
+            );
+          } else {
+            setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+          }
+        }
       } else {
-        handleFileDownload(event.data);
+        console.log("Received unknown data type");
       }
     };
 
@@ -47,77 +63,76 @@ const Chat = () => {
         socketRef.current.close();
       }
     };
-  }, []);
+  }, [currentChat]);
 
   const sendMessage = () => {
     if (message.trim() === "" || !socketRef.current || !isConnected) return;
     const messageData = { message: message.trim() };
+    console.log("Sending message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
   };
 
-  const handleEmojiClick = (event) => {
-    setMessage((prevMessage) => prevMessage + event.detail.unicode);
-  };
-
-  const handleClickOutside = (event) => {
-    if (
-      emojiPickerRef.current &&
-      !emojiPickerRef.current.contains(event.target)
-    ) {
-      setShowEmojiPicker(false);
-    }
-  };
-
-  useEffect(() => {
-    const picker = emojiPickerRef.current;
-    if (showEmojiPicker) {
-      document.addEventListener("mousedown", handleClickOutside);
-      if (picker) {
-        picker.addEventListener("emoji-click", handleEmojiClick);
-      }
-    } else {
-      document.removeEventListener("mousedown", handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      if (picker) {
-        picker.removeEventListener("emoji-click", handleEmojiClick);
-      }
-    };
-  }, [showEmojiPicker]);
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file || !isConnected) return;
+  const handleFileUpload = (file) => {
+    if (!isConnected) return;
 
     const reader = new FileReader();
-    reader.readAsArrayBuffer(file);
+    reader.readAsDataURL(file);
     reader.onload = () => {
-      socketRef.current.send(reader.result);
-      console.log("File uploaded:", file.name);
+      const fileData = reader.result.split(",")[1]; // Get base64 part
+      const metadata = JSON.stringify({ filename: file.name, fileData });
+      console.log("Sending file metadata and data:", metadata);
+      socketRef.current.send(metadata);
     };
   };
 
   const requestFileDownload = (filename) => {
     if (!socketRef.current || !isConnected) return;
+    console.log("Requesting file download for:", filename);
     socketRef.current.send(JSON.stringify({ type: "request_file", filename }));
   };
 
-  const handleFileDownload = (binaryData) => {
-    const blob = new Blob([binaryData], { type: "application/octet-stream" });
+  const handleFileDownload = (base64Data, filename) => {
     const link = document.createElement("a");
-    link.href = window.URL.createObjectURL(blob);
-    link.download = `downloaded_file_${Date.now()}.bin`;
+    link.href = `data:application/octet-stream;base64,${base64Data}`;
+    link.download = filename;
+    console.log("Downloading file");
     link.click();
+  };
+
+  const formatMessage = (text) => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>") // Bold **text**
+      .replace(/\*(.*?)\*/g, "<i>$1</i>") // Italic *text*
+      .replace(/__(.*?)__/g, "<u>$1</u>") // Underline __text__
+      .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>'); // Links [text](url)
+  };
+
+  const handleChatChange = (newChat) => {
+    setCurrentChat(newChat);
+    setMessages([]); // Clear previous messages
+  };
+
+  const getChatHeader = () => {
+    if (currentChat.includes("_")) {
+      const participants = currentChat
+        .split("_")
+        .filter((name) => name !== user);
+      return `Direct Message with ${participants[0]}`;
+    }
+    return `#${currentChat}`;
   };
 
   return (
     <div className="chat-app">
-      <Sidebar />
+      <Sidebar
+        onlineUsers={onlineUsers}
+        setCurrentChat={handleChatChange}
+        chatrooms={["general", "random", "tech", "gaming"]}
+      />
       <div className="chat-container">
         <div className="chat-header">
-          <h2>#general</h2>
+          <h2>{getChatHeader()}</h2>{" "}
         </div>
         <div className="chat-messages">
           {messages.map((msg, index) => (
@@ -128,7 +143,11 @@ const Chat = () => {
                   Download {msg.filename}
                 </button>
               ) : (
-                <span>{msg.message}</span>
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: formatMessage(msg.message),
+                  }}
+                ></span>
               )}
             </div>
           ))}
@@ -139,19 +158,10 @@ const Chat = () => {
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Type a message... (Use *italic*, **bold**, __underline__, or [link](https://example.com))"
           />
-          <div
-            className="emoji-container"
-            style={{ position: "relative", display: "inline-block" }}
-          >
-            <button onClick={() => setShowEmojiPicker((prev) => !prev)}>
-              😀
-            </button>
-            {showEmojiPicker && (
-              <div ref={emojiPickerRef} className="emoji-picker-overlay">
-                <emoji-picker></emoji-picker>
-              </div>
-            )}
-          </div>
+          <EmojiPicker
+            onSelect={(emoji) => setMessage((prev) => prev + emoji)}
+          />
+          <AttachFileButton onFileSelect={handleFileUpload} />
           <Tooltip
             title={!isConnected ? "Not connected to WebSocket Server" : ""}
             arrow
@@ -163,15 +173,6 @@ const Chat = () => {
               </button>
             </span>
           </Tooltip>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            style={{ display: "none" }}
-          />
-          <button onClick={() => fileInputRef.current.click()}>
-            📎 Upload File
-          </button>
         </div>
       </div>
     </div>

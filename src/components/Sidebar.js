@@ -3,9 +3,7 @@ import "./Chat.css";
 import "./Sidebar.css";
 import LogoutButton from "./LogoutButton";
 
-const Sidebar = ({ setCurrentChat }) => {
-  // Dummy user list for direct messages (to be replaced with real data)
-  const users = ["Alice", "Bob", "Charlie"];
+const Sidebar = ({ setCurrentChat, onlineUsers, chatrooms }) => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -18,20 +16,41 @@ const Sidebar = ({ setCurrentChat }) => {
     setUser(username);
   }, []);
 
+  const filteredUsers = onlineUsers
+    .filter((username) => username !== user)
+    .sort();
+
+  const openDirectMessage = (username) => {
+    const dmChannel = [user, username].sort().join("_");
+    setCurrentChat(dmChannel);
+  };
+
   return (
     <div className="sidebar">
       <h2>Welcome, {user}</h2>
-      <h2>Chats</h2>
-      <div className="channel" onClick={() => setCurrentChat("general")}>
-        # general
-      </div>
+      <h2>Chatrooms</h2>
+      {chatrooms.map((room) => (
+        <div
+          key={room}
+          className="channel"
+          onClick={() => setCurrentChat(room)}
+        >
+          # {room}
+        </div>
+      ))}
       <h3>Direct Messages</h3>
-      {users.map((username) => (
+      {filteredUsers.map((username) => (
         <div
           key={username}
           className="dm"
-          onClick={() => setCurrentChat(username)}
+          onClick={() => openDirectMessage(username)}
         >
+          {username}
+        </div>
+      ))}
+      <h3>Online Users</h3>
+      {onlineUsers.map((username) => (
+        <div key={username} className="online-user">
           {username}
         </div>
       ))}
