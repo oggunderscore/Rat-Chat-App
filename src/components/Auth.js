@@ -89,6 +89,7 @@ const Auth = () => {
           }, 1000);
         } else {
           const attempts = (userData.loginAttempts || 0) + 1;
+          console.log("attempts:", attempts);
           if (attempts >= MAX_ATTEMPTS) {
             await updateDoc(doc(db, "users", user.uid), {
               loginAttempts: attempts,
@@ -122,26 +123,26 @@ const Auth = () => {
       </header>
       <h2>{isSignUp ? "Sign Up" : "Sign In"}</h2>
       <form>
-        <div className="form-group">
-          <label>Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter your username"
-          />
-        </div>
         {isSignUp && (
           <div className="form-group">
-            <label>Email</label>
+            <label>Username</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
             />
           </div>
         )}
+        <div className="form-group">
+          <label>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
+          />
+        </div>
         <div className="form-group">
           <label>Password</label>
           <input

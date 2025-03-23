@@ -12,13 +12,13 @@ const LogoutButton = () => {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      localStorage.setItem("isLoggedIn", "false");
+      localStorage.removeItem("isLoggedIn");
+      localStorage.removeItem("username");
 
       // Show success toast
       toast.success("Logged out successfully!");
 
-      // Redirect after 1.5s to allow the toast to display
-      setTimeout(() => navigate("/login"), 1500);
+      navigate("/login");
     } catch (error) {
       console.error("Error signing out:", error);
 

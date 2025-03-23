@@ -15,8 +15,10 @@ const Chat = () => {
 
   useEffect(() => {
     const username = localStorage.getItem("username");
-    if (!username) {
-      console.log("No username found, redirecting to login.");
+    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+
+    if (!username || !isLoggedIn) {
+      console.log("User is not logged in, redirecting to login.");
       window.location.href = "/login";
       return;
     }
@@ -128,7 +130,7 @@ const Chat = () => {
       <Sidebar
         onlineUsers={onlineUsers}
         setCurrentChat={handleChatChange}
-        chatrooms={["general", "random", "tech", "gaming"]}
+        chatrooms={["general"]}
       />
       <div className="chat-container">
         <div className="chat-header">
