@@ -198,3 +198,6 @@ yarn-error.log*
 
 # Local Netlify folder
 .netlify
+
+# File Uploads
+/src/docs/uploads/*

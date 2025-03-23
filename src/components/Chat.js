@@ -47,8 +47,18 @@ const Chat = () => {
           setOnlineUsers(receivedMessage.users); // Update online users
         } else if (receivedMessage.chatroom === currentChat) {
           if (receivedMessage.type === "file_uploaded") {
+            setMessages((prevMessages) => [
+              ...prevMessages,
+              {
+                sender: receivedMessage.sender,
+                type: "file_uploaded",
+                filename: receivedMessage.filename,
+              },
+            ]);
+          } else if (receivedMessage.type === "file_download") {
+            console.log("Downloading file");
             handleFileDownload(
-              receivedMessage.fileData,
+              receivedMessage.file_data,
               receivedMessage.filename
             );
           } else {
@@ -82,7 +92,11 @@ const Chat = () => {
     reader.readAsDataURL(file);
     reader.onload = () => {
       const fileData = reader.result.split(",")[1]; // Get base64 part
-      const metadata = JSON.stringify({ filename: file.name, fileData });
+      const metadata = JSON.stringify({
+        type: "upload_file",
+        fileName: file.name,
+        fileData: fileData,
+      });
       console.log("Sending file metadata and data:", metadata);
       socketRef.current.send(metadata);
     };
@@ -91,15 +105,24 @@ const Chat = () => {
   const requestFileDownload = (filename) => {
     if (!socketRef.current || !isConnected) return;
     console.log("Requesting file download for:", filename);
-    socketRef.current.send(JSON.stringify({ type: "request_file", filename }));
+    socketRef.current.send(
+      JSON.stringify({ type: "request_file", fileName: filename })
+    );
   };
 
   const handleFileDownload = (base64Data, filename) => {
+    const blob = new Blob(
+      [Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))],
+      {
+        type: "application/octet-stream",
+      }
+    );
     const link = document.createElement("a");
-    link.href = `data:application/octet-stream;base64,${base64Data}`;
+    link.href = URL.createObjectURL(blob);
     link.download = filename;
-    console.log("Downloading file");
+    console.log("Opening save dialog for file:", filename);
     link.click();
+    URL.revokeObjectURL(link.href); // Clean up the object URL
   };
 
   const formatMessage = (text) => {
@@ -141,9 +164,15 @@ const Chat = () => {
             <div key={index} className="message">
               <span className="username">{msg.sender}</span>:{" "}
               {msg.type === "file_uploaded" ? (
-                <button onClick={() => requestFileDownload(msg.filename)}>
-                  Download {msg.filename}
-                </button>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    requestFileDownload(msg.filename);
+                  }}
+                >
+                  {msg.filename}
+                </a>
               ) : (
                 <span
                   dangerouslySetInnerHTML={{

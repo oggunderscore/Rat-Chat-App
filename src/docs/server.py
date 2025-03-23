@@ -32,28 +32,34 @@ async def handler(websocket):
         })
         await broadcast_to_chatroom(chatroom, join_message)
 
-        async for message in websocket:
-            if isinstance(message, bytes):
-                await handle_file_upload(websocket, message, username, chatroom)
-            else:
-                try:
-                    data = json.loads(message)
-                    if data.get("type") == "request_file":
-                        await send_file(websocket, data.get("filename"))
+        async for raw_message in websocket:
+            try:
+                # print(raw_message)
+                message = json.loads(raw_message)
+                type = message.get("type")
+                # print(type)
+                if type == "upload_file":
+                    file_name = message.get("fileName")
+                    file_data = message.get("fileData")
+                    # print(file_name)
+                    # print(file_data)
+                    await handle_file_upload(websocket, file_name, file_data, username, chatroom)                    
+                elif type == "request_file":
+                    await send_file(websocket, message.get("fileName"))
+                else:
+                    formatted_message = {
+                        "sender": username,
+                        "chatroom": chatroom,
+                        "message": message.get("message", "")
+                    }
+                    json_data = json.dumps(formatted_message)
+                    if "_" in chatroom:  # Flag for DM channel
+                        await send_to_dm_channel(chatroom, json_data)
                     else:
-                        formatted_message = {
-                            "sender": username,
-                            "chatroom": chatroom,
-                            "message": data.get("message", "")
-                        }
-                        json_data = json.dumps(formatted_message)
-                        if "_" in chatroom:  # Flag for DM channel
-                            await send_to_dm_channel(chatroom, json_data)
-                        else:
-                            await broadcast_to_chatroom(chatroom, json_data)
-                        print(f"Broadcasting message in {chatroom} from {username}: {data.get('message', '')}")
-                except json.JSONDecodeError:
-                    print("Received invalid JSON")
+                        await broadcast_to_chatroom(chatroom, json_data)
+                    print(f"Broadcasting message in {chatroom} from {username}: {message.get('message', '')}")
+            except json.JSONDecodeError:
+                print("Received invalid JSON")
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
@@ -85,35 +91,63 @@ async def broadcast_to_chatroom(chatroom, message):
     if chatroom in chatrooms:
         await asyncio.gather(*[client.send(message) for client in chatrooms[chatroom]])
 
-async def handle_file_upload(websocket, file_data, username, chatroom):
-    filename = f"{username}_{int(asyncio.get_event_loop().time())}.bin"
-    file_path = os.path.join(UPLOAD_DIR, filename)
+async def handle_file_upload(websocket, file_name, file_data, username, chatroom):
+    """Handle file uploads sent as JSON with base64-encoded data."""
+    try:
+        print("RECEIVED INFO:")
+        print(file_name)
+        print(file_data)
+        if not file_name or not file_data:
+            await websocket.send(json.dumps({"status": "error", "message": "Invalid file upload data"}))
+            return
 
-    with open(file_path, "wb") as f:
-        f.write(file_data)
+        import base64
+        decoded_file_data = base64.b64decode(file_data)
+        file_path = os.path.join(UPLOAD_DIR, file_name)
 
-    print(f"File received and saved as {filename}")
+        with open(file_path, "wb") as f:
+            f.write(decoded_file_data)
 
-    response = json.dumps({
-        "type": "file_uploaded",
-        "chatroom": chatroom,
-        "filename": filename,
-        "message": f"{username} uploaded a file."
-    })
-    await broadcast_to_chatroom(chatroom, response)
+        print(f"File received and saved as {file_name}")
+
+        response = json.dumps({
+            "type": "file_uploaded",
+            "chatroom": chatroom,
+            "sender": username,
+            "filename": file_name,
+            "message": f"{username} uploaded a file."
+        })
+        await broadcast_to_chatroom(chatroom, response)
+    except Exception as e:
+        print(f"Error handling file upload: {e}")
+        await websocket.send(json.dumps({"status": "error", "message": "File upload failed"}))
 
 async def send_file(websocket, filename):
+    """Send a requested file to the client."""
+    print("Rquested file: ", filename)
     file_path = os.path.join(UPLOAD_DIR, filename)
 
     if not os.path.exists(file_path):
         await websocket.send(json.dumps({"status": "error", "message": "File not found"}))
         return
 
-    with open(file_path, "rb") as f:
-        file_data = f.read()
+    try:
+        with open(file_path, "rb") as f:
+            file_data = f.read()
 
-    print(f"Sending file: {filename}")
-    await websocket.send(file_data)
+        import base64
+        encoded_file_data = base64.b64encode(file_data).decode("utf-8")
+
+        response = json.dumps({
+            "type": "file_download",
+            "filename": filename,
+            "file_data": encoded_file_data
+        })
+        await websocket.send(response)
+        print(f"File {filename} sent to client")
+    except Exception as e:
+        print(f"Error sending file: {e}")
+        await websocket.send(json.dumps({"status": "error", "message": "File transfer failed"}))
 
 async def send_to_dm_channel(dm_channel, message):
     """Send a message to both users in a DM channel."""
