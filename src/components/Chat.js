@@ -43,10 +43,19 @@ const Chat = () => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
         console.log("Received message:", receivedMessage);
+        console.log("Received message type:", receivedMessage.type);
         if (receivedMessage.type === "online_users") {
           setOnlineUsers(receivedMessage.users); // Update online users
+        } else if (receivedMessage.type === "file_download") {
+          console.log("Downloading file");
+          handleFileDownload(
+            receivedMessage.file_data,
+            receivedMessage.filename
+          );
         } else if (receivedMessage.chatroom === currentChat) {
+          console.log("Received message for current chat");
           if (receivedMessage.type === "file_uploaded") {
+            console.log("Received file upload message");
             setMessages((prevMessages) => [
               ...prevMessages,
               {
@@ -55,12 +64,6 @@ const Chat = () => {
                 filename: receivedMessage.filename,
               },
             ]);
-          } else if (receivedMessage.type === "file_download") {
-            console.log("Downloading file");
-            handleFileDownload(
-              receivedMessage.file_data,
-              receivedMessage.filename
-            );
           } else {
             setMessages((prevMessages) => [...prevMessages, receivedMessage]);
           }
@@ -79,7 +82,8 @@ const Chat = () => {
 
   const sendMessage = () => {
     if (message.trim() === "" || !socketRef.current || !isConnected) return;
-    const messageData = { message: message.trim() };
+    const timestamp = new Date().toISOString();
+    const messageData = { message: message.trim(), timestamp };
     console.log("Sending message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
@@ -148,6 +152,11 @@ const Chat = () => {
     return `#${currentChat}`;
   };
 
+  const formatTimestamp = (isoString) => {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
   return (
     <div className="chat-app">
       <Sidebar
@@ -162,17 +171,21 @@ const Chat = () => {
         <div className="chat-messages">
           {messages.map((msg, index) => (
             <div key={index} className="message">
-              <span className="username">{msg.sender}</span>:{" "}
+              <span className="username">{msg.sender}</span>{" "}
+              <span className="timestamp">
+                [{formatTimestamp(msg.timestamp)}]
+              </span>
+              :{" "}
               {msg.type === "file_uploaded" ? (
-                <a
-                  href="#"
+                <button
+                  className="file-link"
                   onClick={(e) => {
                     e.preventDefault();
                     requestFileDownload(msg.filename);
                   }}
                 >
                   {msg.filename}
-                </a>
+                </button>
               ) : (
                 <span
                   dangerouslySetInnerHTML={{

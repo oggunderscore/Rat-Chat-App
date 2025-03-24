@@ -70,6 +70,7 @@ const Auth = () => {
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
+        console.log("GOOD userData:", userData);
         if (userData.lockUntil && userData.lockUntil > Date.now()) {
           toast.error("Account is locked. Try again later.");
           setLoading(false);
@@ -109,7 +110,31 @@ const Auth = () => {
         setLoading(false);
       }
     } catch (error) {
-      toast.error("Error signing in. Please try again.");
+      console.log("Attempting to fetch user document", email);
+      const userQuery = doc(db, "users", email); // Use email to fetch the user document
+      console.log("userQuery:", userQuery);
+      const userDoc = await getDoc(userQuery);
+      console.log("userDoc:", userDoc);
+      if (userDoc.exists()) {
+        console.log("User exists");
+        const userData = userDoc.data();
+        const attempts = (userData.loginAttempts || 0) + 1;
+        console.log("attempts:", attempts);
+        if (attempts >= MAX_ATTEMPTS) {
+          await updateDoc(userQuery, {
+            loginAttempts: attempts,
+            lockUntil: Date.now() + LOCK_TIME,
+          });
+          toast.error("Account locked due to too many failed attempts.");
+        } else {
+          await updateDoc(userQuery, {
+            loginAttempts: attempts,
+          });
+          toast.error("Invalid email or password");
+        }
+      } else {
+        toast.error("Error signing in. Please try again.");
+      }
       setLoading(false);
     }
   };

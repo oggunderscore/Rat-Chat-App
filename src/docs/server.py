@@ -2,12 +2,24 @@ import asyncio
 import websockets
 import json
 import os
+from datetime import datetime
 
 clients = {}
 chatrooms = {"general": set()}  # Dictionary to store chatrooms and their clients
 UPLOAD_DIR = "uploads"
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+chatroom_logs = {}  # Dictionary to store logs for each chatroom
+
+def save_logs():
+    for chatroom, messages in chatroom_logs.items():
+        log_file_path = os.path.join(LOG_DIR, f"{chatroom}.log")
+        with open(log_file_path, "a") as log_file:
+            log_file.write("\n".join(messages) + "\n")
+    print("Logs saved.")
 
 async def handler(websocket):
     try:
@@ -28,7 +40,8 @@ async def handler(websocket):
         join_message = json.dumps({
             "sender": "System",
             "chatroom": chatroom,
-            "message": f"{username} has joined {chatroom}"
+            "message": f"{username} has joined {chatroom}",
+            "timestamp": datetime.now().isoformat()
         })
         await broadcast_to_chatroom(chatroom, join_message)
 
@@ -50,7 +63,8 @@ async def handler(websocket):
                     formatted_message = {
                         "sender": username,
                         "chatroom": chatroom,
-                        "message": message.get("message", "")
+                        "message": message.get("message", ""),
+                        "timestamp": message.get("timestamp", None) or datetime.now().isoformat()
                     }
                     json_data = json.dumps(formatted_message)
                     if "_" in chatroom:  # Flag for DM channel
@@ -71,7 +85,8 @@ async def handler(websocket):
             leave_message = json.dumps({
                 "sender": "System",
                 "chatroom": chatroom,
-                "message": f"{username} has left {chatroom}"
+                "message": f"{username} has left {chatroom}",
+                "timestamp": datetime.now().isoformat()
             })
             if "_" in chatroom:  # Check if it's a DM channel
                 await send_to_dm_channel(chatroom, leave_message)
@@ -87,8 +102,12 @@ async def broadcast_online_users():
     await asyncio.gather(*[client.send(message) for client in clients])
 
 async def broadcast_to_chatroom(chatroom, message):
-    """Send a message to all clients in a specific chatroom."""
+    """Send a message to all clients in a specific chatroom and log it."""
     if chatroom in chatrooms:
+        if chatroom not in chatroom_logs:
+            chatroom_logs[chatroom] = []
+        chatroom_logs[chatroom].append(message)
+
         await asyncio.gather(*[client.send(message) for client in chatrooms[chatroom]])
 
 async def handle_file_upload(websocket, file_name, file_data, username, chatroom):
@@ -115,7 +134,8 @@ async def handle_file_upload(websocket, file_name, file_data, username, chatroom
             "chatroom": chatroom,
             "sender": username,
             "filename": file_name,
-            "message": f"{username} uploaded a file."
+            "message": f"{username} uploaded a file.",
+            "timestamp": datetime.now().isoformat()
         })
         await broadcast_to_chatroom(chatroom, response)
     except Exception as e:
@@ -150,15 +170,29 @@ async def send_file(websocket, filename):
         await websocket.send(json.dumps({"status": "error", "message": "File transfer failed"}))
 
 async def send_to_dm_channel(dm_channel, message):
-    """Send a message to both users in a DM channel."""
+    """Send a message to both users in a DM channel and log it."""
+    # Log the message
+    if dm_channel not in chatroom_logs:
+        chatroom_logs[dm_channel] = []
+    chatroom_logs[dm_channel].append(message)
+
     users_in_channel = dm_channel.split("_")
     for client, data in clients.items():
         if data["username"] in users_in_channel:
             await client.send(message)
 
 async def main():
-    async with websockets.serve(handler, "0.0.0.0", 8765):
-        print("WebSocket Server is running on ws://0.0.0.0:8765")
-        await asyncio.Future()
+    try:
+        async with websockets.serve(handler, "0.0.0.0", 8765):
+            print("WebSocket Server is running on ws://0.0.0.0:8765")
+            await asyncio.Future()
+    except KeyboardInterrupt:
+        print("Server shutting down...")
+        save_logs()
 
-asyncio.run(main())
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Server shutting down...")
+        save_logs()
