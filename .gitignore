@@ -200,4 +200,4 @@ yarn-error.log*
 .netlify
 
 # File Uploads
-/src/docs/uploads/*
+/src/docs/*
