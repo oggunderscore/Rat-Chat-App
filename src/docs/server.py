@@ -12,14 +12,33 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
+
+# Delete all log files on startup
+for log_file in os.listdir(LOG_DIR):
+    log_file_path = os.path.join(LOG_DIR, log_file)
+    if os.path.isfile(log_file_path):
+        os.remove(log_file_path)
+print("All log files deleted on startup.")
+
 chatroom_logs = {}  # Dictionary to store logs for each chatroom
 
 def save_logs():
     for chatroom, messages in chatroom_logs.items():
         log_file_path = os.path.join(LOG_DIR, f"{chatroom}.log")
-        with open(log_file_path, "a") as log_file:
+        with open(log_file_path, "w") as log_file: # overwrite the history
             log_file.write("\n".join(messages) + "\n")
     print("Logs saved.")
+
+async def send_chatroom_history(websocket, chatroom):
+    """Send the chatroom's message history to the user."""
+    if chatroom in chatroom_logs:
+        history = chatroom_logs[chatroom]
+        history_message = json.dumps({
+            "type": "chatroom_history",
+            "chatroom": chatroom,
+            "history": history
+        })
+        await websocket.send(history_message)
 
 async def handler(websocket):
     try:
@@ -35,15 +54,18 @@ async def handler(websocket):
 
         print(f"User {username} connected to {chatroom}")
 
+        # Send chatroom history to the user
+        await send_chatroom_history(websocket, chatroom)
+
         await broadcast_online_users()
 
-        join_message = json.dumps({
-            "sender": "System",
-            "chatroom": chatroom,
-            "message": f"{username} has joined {chatroom}",
-            "timestamp": datetime.now().isoformat()
-        })
-        await broadcast_to_chatroom(chatroom, join_message)
+        # join_message = json.dumps({
+        #     "sender": "System",
+        #     "chatroom": chatroom,
+        #     "message": f"{username} has joined {chatroom}",
+        #     "timestamp": datetime.now().isoformat()
+        # })
+        # await broadcast_to_chatroom(chatroom, join_message)
 
         async for raw_message in websocket:
             try:
@@ -63,15 +85,18 @@ async def handler(websocket):
                     formatted_message = {
                         "sender": username,
                         "chatroom": chatroom,
-                        "message": message.get("message", ""),
+                        "message": message.get("message", "").strip(),
                         "timestamp": message.get("timestamp", None) or datetime.now().isoformat()
                     }
+                    if not formatted_message["message"]:  # Skip broadcasting if the message is empty
+                        print(f"Skipping empty message from {username} in {chatroom}")
+                        continue
                     json_data = json.dumps(formatted_message)
                     if "_" in chatroom:  # Flag for DM channel
                         await send_to_dm_channel(chatroom, json_data)
                     else:
                         await broadcast_to_chatroom(chatroom, json_data)
-                    print(f"Broadcasting message in {chatroom} from {username}: {message.get('message', '')}")
+                    print(f"Broadcasting message in {chatroom} from {username}: {formatted_message['message']}")
             except json.JSONDecodeError:
                 print("Received invalid JSON")
     except websockets.exceptions.ConnectionClosed:
@@ -82,16 +107,16 @@ async def handler(websocket):
             username = user_data["username"]
             chatroom = user_data["chatroom"]
             chatrooms[chatroom].remove(websocket)
-            leave_message = json.dumps({
-                "sender": "System",
-                "chatroom": chatroom,
-                "message": f"{username} has left {chatroom}",
-                "timestamp": datetime.now().isoformat()
-            })
-            if "_" in chatroom:  # Check if it's a DM channel
-                await send_to_dm_channel(chatroom, leave_message)
-            else:
-                await broadcast_to_chatroom(chatroom, leave_message)
+            # leave_message = json.dumps({
+            #     "sender": "System",
+            #     "chatroom": chatroom,
+            #     "message": f"{username} has left {chatroom}",
+            #     "timestamp": datetime.now().isoformat()
+            # })
+            # if "_" in chatroom:  # Check if it's a DM channel
+            #     await send_to_dm_channel(chatroom, leave_message)
+            # else:
+            #     await broadcast_to_chatroom(chatroom, leave_message)
             print(f"User {username} disconnected from {chatroom}")
             await broadcast_online_users()
 

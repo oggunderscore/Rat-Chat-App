@@ -9,6 +9,14 @@
   padding: 20px;
 }
 
+.timestamp {
+  padding-right: 5px;
+}
+
+.username {
+  padding-right: 10px;
+}
+
 .messages {
   background: #1e1e1e;
   padding: 15px;

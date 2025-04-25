@@ -24,7 +24,7 @@ const Chat = () => {
     }
     setUser(username);
 
-    socketRef.current = new WebSocket("ws://localhost:8765"); // was 47.154.96.241
+    socketRef.current = new WebSocket("ws://localhost:8765"); // was 47.154.96.241 // was 47.154.96.241
 
     socketRef.current.onopen = () => {
       console.log("WebSocket connection opened");
@@ -32,6 +32,11 @@ const Chat = () => {
         JSON.stringify({ username, chatroom: currentChat })
       );
       setIsConnected(true);
+
+      // Fetch chat history for the current chatroom
+      socketRef.current.send(
+        JSON.stringify({ type: "fetch_history", chatroom: currentChat })
+      );
     };
 
     socketRef.current.onclose = () => {
@@ -52,6 +57,9 @@ const Chat = () => {
             receivedMessage.file_data,
             receivedMessage.filename
           );
+        } else if (receivedMessage.type === "chatroom_history") {
+          console.log("Received chatroom history");
+          setMessages(receivedMessage.history.map((msg) => JSON.parse(msg))); // Load chatroom history
         } else if (receivedMessage.chatroom === currentChat) {
           console.log("Received message for current chat");
           if (receivedMessage.type === "file_uploaded") {
@@ -87,6 +95,13 @@ const Chat = () => {
     console.log("Sending message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
+  };
+
+  const handleKeyPress = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault(); // Prevent newline in the textarea
+      sendMessage();
+    }
   };
 
   const handleFileUpload = (file) => {
@@ -140,6 +155,13 @@ const Chat = () => {
   const handleChatChange = (newChat) => {
     setCurrentChat(newChat);
     setMessages([]); // Clear previous messages
+
+    // Request chat history for the new chatroom
+    if (socketRef.current && isConnected) {
+      socketRef.current.send(
+        JSON.stringify({ type: "fetch_history", chatroom: newChat })
+      );
+    }
   };
 
   const getChatHeader = () => {
@@ -171,11 +193,10 @@ const Chat = () => {
         <div className="chat-messages">
           {messages.map((msg, index) => (
             <div key={index} className="message">
-              <span className="username">{msg.sender}</span>{" "}
               <span className="timestamp">
                 [{formatTimestamp(msg.timestamp)}]
               </span>
-              :{" "}
+              <span className="username">{msg.sender}: </span>
               {msg.type === "file_uploaded" ? (
                 <button
                   className="file-link"
@@ -200,6 +221,7 @@ const Chat = () => {
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress} // deprecated but works
             placeholder="Type a message... (Use *italic*, **bold**, __underline__, or [link](https://example.com))"
           />
           <EmojiPicker
