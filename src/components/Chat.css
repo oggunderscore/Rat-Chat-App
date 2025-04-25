@@ -17,6 +17,10 @@
   padding-right: 10px;
 }
 
+.chat-messages {
+  padding-left: 10px;
+}
+
 .messages {
   background: #1e1e1e;
   padding: 15px;
@@ -30,9 +34,9 @@
   align-items: flex-start;
   text-align: left;
   width: fit-content;
-  max-width: 80%;
+  max-width: 100%;
   margin-bottom: 10px;
-  padding: 8px;
+  padding: 10px 8px;
   border-radius: 5px;
   background: #333;
 }

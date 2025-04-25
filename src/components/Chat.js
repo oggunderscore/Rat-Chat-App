@@ -175,7 +175,12 @@ const Chat = () => {
   };
 
   const formatTimestamp = (isoString) => {
+    // Parse the ISO string and format it to a readable time
     const date = new Date(isoString);
+    if (isNaN(date.getTime())) {
+      console.error("Invalid timestamp format:", isoString);
+      return "Invalid Date";
+    }
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 

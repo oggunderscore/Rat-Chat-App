@@ -152,7 +152,7 @@ async def handle_file_upload(websocket, file_name, file_data, username, chatroom
         with open(file_path, "wb") as f:
             f.write(decoded_file_data)
 
-        print(f"File received and saved as {file_name}")
+        print(f"{datetime.now().isoformat()} - File received and saved as {file_name}")
 
         response = json.dumps({
             "type": "file_uploaded",
