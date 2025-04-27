@@ -14,13 +14,6 @@ const decryptMessage = (encryptedMessage, key) => {
   return bytes.toString(CryptoJS.enc.Utf8);
 };
 
-const deriveKey = (password) => {
-  return CryptoJS.PBKDF2(password, "unique-salt", {
-    keySize: 256 / 32,
-    iterations: 1000,
-  }).toString();
-};
-
 const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
