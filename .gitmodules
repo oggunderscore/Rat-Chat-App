@@ -1,0 +1,3 @@
+[submodule "RatChatServer"]
+	path = RatChatServer
+	url = https://github.com/oggunderscore/Rat-Chat-Server.git
