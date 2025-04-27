@@ -73,7 +73,30 @@ async def handler(websocket):
                 message = json.loads(raw_message)
                 type = message.get("type")
                 # print(type)
-                if type == "upload_file":
+                if type == "switch_chatroom":
+                    new_chatroom = message.get("chatroom")
+                    if not new_chatroom:
+                        continue
+
+                    # Update the client's chatroom
+                    old_chatroom = clients[websocket]["chatroom"]
+                    if old_chatroom != new_chatroom:
+                        chatrooms[old_chatroom].remove(websocket)
+                        if not chatrooms[old_chatroom]:
+                            del chatrooms[old_chatroom]  # Clean up empty chatrooms
+
+                        if new_chatroom not in chatrooms:
+                            chatrooms[new_chatroom] = set()
+                        chatrooms[new_chatroom].add(websocket)
+
+                        clients[websocket]["chatroom"] = new_chatroom
+                        chatroom = new_chatroom  # Update the local chatroom variable
+                        print(f"User {clients[websocket]['username']} switched from {old_chatroom} to {new_chatroom}")
+
+                        # Send the new chatroom's history to the client
+                        await send_chatroom_history(websocket, new_chatroom)
+
+                elif type == "upload_file":
                     file_name = message.get("fileName")
                     file_data = message.get("fileData")
                     # print(file_name)
@@ -84,7 +107,7 @@ async def handler(websocket):
                 else:
                     formatted_message = {
                         "sender": username,
-                        "chatroom": chatroom,
+                        "chatroom": chatroom,  
                         "message": message.get("message", "").strip(),
                         "timestamp": message.get("timestamp", None) or datetime.now().isoformat()
                     }
@@ -122,7 +145,7 @@ async def handler(websocket):
 
 async def broadcast_online_users():
     """Broadcast the list of all online users to all connected clients."""
-    online_users = [data["username"] for data in clients.values()]
+    online_users = [data["username"] for data in clients.values() if data["username"]]  # Filter out None or invalid usernames
     message = json.dumps({"type": "online_users", "users": online_users})
     await asyncio.gather(*[client.send(message) for client in clients])
 
@@ -133,7 +156,13 @@ async def broadcast_to_chatroom(chatroom, message):
             chatroom_logs[chatroom] = []
         chatroom_logs[chatroom].append(message)
 
-        await asyncio.gather(*[client.send(message) for client in chatrooms[chatroom]])
+        # Ensure the chatroom property is included in the message
+        message_data = json.loads(message)
+        message_data["chatroom"] = chatroom
+        updated_message = json.dumps(message_data)
+
+        # Broadcast the message to all clients in the chatroom
+        await asyncio.gather(*[client.send(updated_message) for client in chatrooms[chatroom]])
 
 async def handle_file_upload(websocket, file_name, file_data, username, chatroom):
     """Handle file uploads sent as JSON with base64-encoded data."""
@@ -201,10 +230,15 @@ async def send_to_dm_channel(dm_channel, message):
         chatroom_logs[dm_channel] = []
     chatroom_logs[dm_channel].append(message)
 
+    # Ensure the chatroom property is included in the message
+    message_data = json.loads(message)
+    message_data["chatroom"] = dm_channel
+    updated_message = json.dumps(message_data)
+
     users_in_channel = dm_channel.split("_")
     for client, data in clients.items():
         if data["username"] in users_in_channel:
-            await client.send(message)
+            await client.send(updated_message)
 
 async def main():
     try:

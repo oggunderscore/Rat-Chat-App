@@ -23,10 +23,20 @@ const Chat = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [currentChat, setCurrentChat] = useState("general");
+  const currentChatRef = useRef("general"); // Ref to track the current chatroom
   const retryCountRef = useRef(0); // Use a ref to track retry attempts
   const socketRef = useRef(null);
+  const retryTimeoutRef = useRef(null); // Track the retry timeout
 
   const connectWebSocket = useCallback(() => {
+    if (
+      socketRef.current &&
+      socketRef.current.readyState !== WebSocket.CLOSED
+    ) {
+      console.log("WebSocket is already connected or connecting");
+      return;
+    }
+
     if (retryCountRef.current >= 5) {
       toast.error(
         "Failed to reconnect after 5 attempts. Please refresh to try again."
@@ -39,13 +49,25 @@ const Chat = () => {
     socketRef.current.onopen = () => {
       console.log("WebSocket connection opened");
       toast.success("Connected to WebSocket server!");
+      const username = localStorage.getItem("username"); // Use username directly
       setIsConnected(true);
       retryCountRef.current = 0; // Reset retry count
+
+      // Clear any pending retry timeout
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+
+      console.log("User: ", username);
       socketRef.current.send(
-        JSON.stringify({ username: user, chatroom: currentChat })
+        JSON.stringify({ username, chatroom: currentChatRef.current }) // Use currentChatRef
       );
       socketRef.current.send(
-        JSON.stringify({ type: "fetch_history", chatroom: currentChat })
+        JSON.stringify({
+          type: "fetch_history",
+          chatroom: currentChatRef.current,
+        }) // Use currentChatRef
       );
     };
 
@@ -55,8 +77,7 @@ const Chat = () => {
         toast.error("Connection lost. Retrying in 5 seconds...");
         setIsConnected(false);
         retryCountRef.current += 1; // Increment retry count
-        // console.log("Retry Count: ", retryCountRef.current);
-        setTimeout(connectWebSocket, 5000); // Retry after 5 seconds
+        retryTimeoutRef.current = setTimeout(connectWebSocket, 5000); // Retry after 5 seconds
       }
     };
 
@@ -79,17 +100,21 @@ const Chat = () => {
             return parsedMessage;
           });
           setMessages(decryptedHistory); // Load decrypted chatroom history
-        } else if (
-          receivedMessage.chatroom === currentChat &&
-          receivedMessage.message
-        ) {
-          console.log("Encrypted Message: ", receivedMessage.message);
-          const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
-          const decryptedMessage = decryptMessage(
-            receivedMessage.message,
-            encryptionKey
+        } else if (receivedMessage.chatroom === currentChatRef.current) {
+          // Append live messages for the current chatroom
+          if (receivedMessage.message) {
+            const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
+            const decryptedMessage = decryptMessage(
+              receivedMessage.message,
+              encryptionKey
+            );
+            receivedMessage.message = decryptedMessage; // Replace encrypted message with decrypted one
+            setMessages((prevMessages) => [...prevMessages, receivedMessage]);
+          }
+        } else {
+          console.log(
+            `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
           );
-          receivedMessage.message = decryptedMessage; // Replace encrypted message with decrypted one
         }
 
         if (receivedMessage.type === "online_users") {
@@ -100,26 +125,12 @@ const Chat = () => {
             receivedMessage.file_data,
             receivedMessage.filename
           );
-        } else if (receivedMessage.chatroom === currentChat) {
-          if (receivedMessage.type === "file_uploaded") {
-            console.log("Received file upload message");
-            setMessages((prevMessages) => [
-              ...prevMessages,
-              {
-                sender: receivedMessage.sender,
-                type: "file_uploaded",
-                filename: receivedMessage.filename,
-              },
-            ]);
-          } else {
-            setMessages((prevMessages) => [...prevMessages, receivedMessage]);
-          }
         }
       } else {
         console.log("Received unknown data type");
       }
     };
-  }, [user, currentChat]); // Add dependencies
+  }, []); // No dependency on currentChat
 
   useEffect(() => {
     const username = localStorage.getItem("username");
@@ -132,6 +143,7 @@ const Chat = () => {
       return;
     }
     setUser(username);
+    console.log("Pre-User: ", username);
 
     connectWebSocket(); // Initialize WebSocket connection
 
@@ -148,7 +160,11 @@ const Chat = () => {
     const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
 
     const encryptedMessage = encryptMessage(message.trim(), encryptionKey);
-    const messageData = { message: encryptedMessage, timestamp };
+    const messageData = {
+      message: encryptedMessage,
+      timestamp,
+      chatroom: currentChat, // Include the current chatroom in the payload
+    };
     console.log("Sending encrypted message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
@@ -167,13 +183,17 @@ const Chat = () => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
+      const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
       const fileData = reader.result.split(",")[1]; // Get base64 part
+      const encryptedFileData = encryptMessage(fileData, encryptionKey); // Encrypt file data
+
       const metadata = JSON.stringify({
         type: "upload_file",
         fileName: file.name,
-        fileData: fileData,
+        fileData: encryptedFileData, // Send encrypted file data
       });
-      console.log("Sending file metadata and data:", metadata);
+
+      console.log("Sending encrypted file metadata and data:", metadata);
       socketRef.current.send(metadata);
     };
   };
@@ -187,8 +207,11 @@ const Chat = () => {
   };
 
   const handleFileDownload = (base64Data, filename) => {
+    const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
+    const decryptedFileData = decryptMessage(base64Data, encryptionKey); // Decrypt file data
+
     const blob = new Blob(
-      [Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))],
+      [Uint8Array.from(atob(decryptedFileData), (c) => c.charCodeAt(0))],
       {
         type: "application/octet-stream",
       }
@@ -210,14 +233,24 @@ const Chat = () => {
   };
 
   const handleChatChange = (newChat) => {
-    setCurrentChat(newChat);
-    setMessages([]); // Clear previous messages
+    if (currentChat !== newChat) {
+      setCurrentChat(newChat);
+      currentChatRef.current = newChat; // Update the ref immediately
+      setMessages([]); // Clear previous messages
+    }
 
-    // Request chat history for the new chatroom
-    if (socketRef.current && isConnected) {
+    // Always send a request to fetch history, even if already in the same chatroom
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      console.log(`Switching to chatroom: ${newChat}`);
+      socketRef.current.send(
+        JSON.stringify({ type: "switch_chatroom", chatroom: newChat })
+      );
       socketRef.current.send(
         JSON.stringify({ type: "fetch_history", chatroom: newChat })
       );
+    } else {
+      console.error("WebSocket is not open. Unable to switch chatrooms.");
+      toast.error("Unable to switch chatrooms. WebSocket is not connected.");
     }
   };
 
@@ -269,6 +302,7 @@ const Chat = () => {
         </div>
         <div className="chat-messages">
           {messages
+            // .filter((msg) => msg.chatroom === currentChat) // Filter messages by current chatroom
             .filter((msg) => msg.message && msg.timestamp) // Filter out invalid messages
             .map((msg, index) => (
               <div key={index} className="message">
