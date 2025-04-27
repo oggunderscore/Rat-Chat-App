@@ -44,12 +44,16 @@ const Chat = () => {
       return;
     }
 
-    socketRef.current = new WebSocket("ws://localhost:8765");
+    console.log("Connecting to WebSocket server...");
+
+    socketRef.current = new WebSocket(
+      "wss://rat-chat-server-production.up.railway.app"
+    );
 
     socketRef.current.onopen = () => {
       console.log("WebSocket connection opened");
       toast.success("Connected to WebSocket server!");
-      const username = localStorage.getItem("username"); // Use username directly
+      const username = localStorage.getItem("username");
       setIsConnected(true);
       retryCountRef.current = 0; // Reset retry count
 
@@ -69,6 +73,10 @@ const Chat = () => {
           chatroom: currentChatRef.current,
         }) // Use currentChatRef
       );
+    };
+
+    socketRef.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
     };
 
     socketRef.current.onclose = () => {
