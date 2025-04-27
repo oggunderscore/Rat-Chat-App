@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Sidebar from "../components/Sidebar";
 import EmojiPicker from "../components/EmojiPicker";
 import AttachFileButton from "../components/AttachFileButton";
 import Tooltip from "@mui/material/Tooltip";
 import CryptoJS from "crypto-js";
+import { ToastContainer, toast } from "react-toastify"; // Add toast notifications
+import "react-toastify/dist/ReactToastify.css";
 
 const encryptMessage = (message, key) => {
   return CryptoJS.AES.encrypt(message, key).toString();
@@ -21,30 +23,27 @@ const Chat = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [currentChat, setCurrentChat] = useState("general");
+  const retryCountRef = useRef(0); // Use a ref to track retry attempts
   const socketRef = useRef(null);
 
-  useEffect(() => {
-    const username = localStorage.getItem("username");
-    const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
-    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-
-    if (!username || !isLoggedIn || !encryptionKey) {
-      console.log("User is not logged in, redirecting to login.");
-      window.location.href = "/login";
+  const connectWebSocket = useCallback(() => {
+    if (retryCountRef.current >= 5) {
+      toast.error(
+        "Failed to reconnect after 5 attempts. Please refresh to try again."
+      );
       return;
     }
-    setUser(username);
 
     socketRef.current = new WebSocket("ws://localhost:8765");
 
     socketRef.current.onopen = () => {
       console.log("WebSocket connection opened");
-      socketRef.current.send(
-        JSON.stringify({ username, chatroom: currentChat })
-      );
+      toast.success("Connected to WebSocket server!");
       setIsConnected(true);
-
-      // Fetch chat history for the current chatroom
+      retryCountRef.current = 0; // Reset retry count
+      socketRef.current.send(
+        JSON.stringify({ username: user, chatroom: currentChat })
+      );
       socketRef.current.send(
         JSON.stringify({ type: "fetch_history", chatroom: currentChat })
       );
@@ -52,17 +51,21 @@ const Chat = () => {
 
     socketRef.current.onclose = () => {
       console.log("WebSocket connection closed");
-      setIsConnected(false);
+      if (retryCountRef.current < 5) {
+        toast.error("Connection lost. Retrying in 5 seconds...");
+        setIsConnected(false);
+        retryCountRef.current += 1; // Increment retry count
+        // console.log("Retry Count: ", retryCountRef.current);
+        setTimeout(connectWebSocket, 5000); // Retry after 5 seconds
+      }
     };
 
     socketRef.current.onmessage = (event) => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
         console.log("Received message:", receivedMessage);
-        // console.log("Received message type:", receivedMessage.type);
 
         if (receivedMessage.type === "chatroom_history") {
-          // console.log("Received chatroom history");
           const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
           console.log("History: ", receivedMessage.history);
           const decryptedHistory = receivedMessage.history.map((msg) => {
@@ -73,7 +76,6 @@ const Chat = () => {
                 encryptionKey
               );
             }
-            // console.log("Parsed message: ", parsedMessage);
             return parsedMessage;
           });
           setMessages(decryptedHistory); // Load decrypted chatroom history
@@ -99,7 +101,6 @@ const Chat = () => {
             receivedMessage.filename
           );
         } else if (receivedMessage.chatroom === currentChat) {
-          // console.log("Received message for current chat");
           if (receivedMessage.type === "file_uploaded") {
             console.log("Received file upload message");
             setMessages((prevMessages) => [
@@ -118,13 +119,28 @@ const Chat = () => {
         console.log("Received unknown data type");
       }
     };
+  }, [user, currentChat]); // Add dependencies
+
+  useEffect(() => {
+    const username = localStorage.getItem("username");
+    const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
+    const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
+
+    if (!username || !isLoggedIn || !encryptionKey) {
+      console.log("User is not logged in, redirecting to login.");
+      window.location.href = "/login";
+      return;
+    }
+    setUser(username);
+
+    connectWebSocket(); // Initialize WebSocket connection
 
     return () => {
       if (socketRef.current) {
         socketRef.current.close();
       }
     };
-  }, [currentChat]);
+  }, [connectWebSocket]); // Add connectWebSocket as a dependency
 
   const sendMessage = () => {
     if (message.trim() === "" || !socketRef.current || !isConnected) return;
@@ -222,7 +238,6 @@ const Chat = () => {
     }
 
     const date = new Date(isoString);
-    // console.log("Parsed date:", date);
 
     if (isNaN(date.getTime())) {
       console.error("Invalid timestamp format:", isoString);
@@ -232,8 +247,14 @@ const Chat = () => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
+  const handleReconnect = () => {
+    retryCountRef.current = 0; // Reset retry count
+    connectWebSocket(); // Attempt to reconnect
+  };
+
   return (
     <div className="chat-app">
+      <ToastContainer position="top-right" autoClose={4000} />
       <Sidebar
         onlineUsers={onlineUsers}
         setCurrentChat={handleChatChange}
@@ -241,7 +262,10 @@ const Chat = () => {
       />
       <div className="chat-container">
         <div className="chat-header">
-          <h2>{getChatHeader()}</h2>{" "}
+          <h2>{getChatHeader()}</h2>
+          {!isConnected && retryCountRef.current >= 5 && (
+            <button onClick={handleReconnect}>Reconnect</button>
+          )}
         </div>
         <div className="chat-messages">
           {messages
