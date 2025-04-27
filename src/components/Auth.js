@@ -24,6 +24,13 @@ const Auth = () => {
     return CryptoJS.SHA256(password).toString();
   };
 
+  const generateEncryptionKey = (password) => {
+    return CryptoJS.PBKDF2(password, "unique-salt", {
+      keySize: 256 / 32,
+      iterations: 1000,
+    }).toString();
+  };
+
   const handleSignUp = async (e) => {
     e.preventDefault();
     if (!username || !email || !password) {
@@ -32,6 +39,7 @@ const Auth = () => {
     }
     setLoading(true);
     const hashedPassword = hashPassword(password);
+    const encryptionKey = generateEncryptionKey(password); // Generate encryption key
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -47,6 +55,7 @@ const Auth = () => {
         lastLoggedIn: new Date().toISOString(),
         loginAttempts: 0,
       });
+      localStorage.setItem("encryptionKey", encryptionKey); // Store encryption key
       toast.success("User registered successfully");
       setLoading(false);
       setIsSignUp(false);
@@ -60,6 +69,7 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
     const hashedPassword = hashPassword(password);
+    const encryptionKey = generateEncryptionKey(password); // Generate encryption key
     try {
       const userCredential = await signInWithEmailAndPassword(
         auth,
@@ -83,6 +93,7 @@ const Auth = () => {
           });
           localStorage.setItem("isLoggedIn", "true");
           localStorage.setItem("username", userData.username);
+          localStorage.setItem("encryptionKey", encryptionKey); // Store encryption key
           toast.success("User signed in successfully");
           setLoading(false);
           setTimeout(() => {

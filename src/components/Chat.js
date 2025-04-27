@@ -3,6 +3,23 @@ import Sidebar from "../components/Sidebar";
 import EmojiPicker from "../components/EmojiPicker";
 import AttachFileButton from "../components/AttachFileButton";
 import Tooltip from "@mui/material/Tooltip";
+import CryptoJS from "crypto-js";
+
+const encryptMessage = (message, key) => {
+  return CryptoJS.AES.encrypt(message, key).toString();
+};
+
+const decryptMessage = (encryptedMessage, key) => {
+  const bytes = CryptoJS.AES.decrypt(encryptedMessage, key);
+  return bytes.toString(CryptoJS.enc.Utf8);
+};
+
+const deriveKey = (password) => {
+  return CryptoJS.PBKDF2(password, "unique-salt", {
+    keySize: 256 / 32,
+    iterations: 1000,
+  }).toString();
+};
 
 const Chat = () => {
   const [message, setMessage] = useState("");
@@ -15,16 +32,17 @@ const Chat = () => {
 
   useEffect(() => {
     const username = localStorage.getItem("username");
+    const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
 
-    if (!username || !isLoggedIn) {
+    if (!username || !isLoggedIn || !encryptionKey) {
       console.log("User is not logged in, redirecting to login.");
       window.location.href = "/login";
       return;
     }
     setUser(username);
 
-    socketRef.current = new WebSocket("ws://localhost:8765"); // was 47.154.96.241 // was 47.154.96.241
+    socketRef.current = new WebSocket("ws://localhost:8765");
 
     socketRef.current.onopen = () => {
       console.log("WebSocket connection opened");
@@ -48,7 +66,37 @@ const Chat = () => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
         console.log("Received message:", receivedMessage);
-        console.log("Received message type:", receivedMessage.type);
+        // console.log("Received message type:", receivedMessage.type);
+
+        if (receivedMessage.type === "chatroom_history") {
+          // console.log("Received chatroom history");
+          const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
+          console.log("History: ", receivedMessage.history);
+          const decryptedHistory = receivedMessage.history.map((msg) => {
+            const parsedMessage = JSON.parse(msg);
+            if (parsedMessage.message) {
+              parsedMessage.message = decryptMessage(
+                parsedMessage.message,
+                encryptionKey
+              );
+            }
+            // console.log("Parsed message: ", parsedMessage);
+            return parsedMessage;
+          });
+          setMessages(decryptedHistory); // Load decrypted chatroom history
+        } else if (
+          receivedMessage.chatroom === currentChat &&
+          receivedMessage.message
+        ) {
+          console.log("Encrypted Message: ", receivedMessage.message);
+          const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
+          const decryptedMessage = decryptMessage(
+            receivedMessage.message,
+            encryptionKey
+          );
+          receivedMessage.message = decryptedMessage; // Replace encrypted message with decrypted one
+        }
+
         if (receivedMessage.type === "online_users") {
           setOnlineUsers(receivedMessage.users); // Update online users
         } else if (receivedMessage.type === "file_download") {
@@ -57,11 +105,8 @@ const Chat = () => {
             receivedMessage.file_data,
             receivedMessage.filename
           );
-        } else if (receivedMessage.type === "chatroom_history") {
-          console.log("Received chatroom history");
-          setMessages(receivedMessage.history.map((msg) => JSON.parse(msg))); // Load chatroom history
         } else if (receivedMessage.chatroom === currentChat) {
-          console.log("Received message for current chat");
+          // console.log("Received message for current chat");
           if (receivedMessage.type === "file_uploaded") {
             console.log("Received file upload message");
             setMessages((prevMessages) => [
@@ -91,8 +136,11 @@ const Chat = () => {
   const sendMessage = () => {
     if (message.trim() === "" || !socketRef.current || !isConnected) return;
     const timestamp = new Date().toISOString();
-    const messageData = { message: message.trim(), timestamp };
-    console.log("Sending message:", messageData);
+    const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
+
+    const encryptedMessage = encryptMessage(message.trim(), encryptionKey);
+    const messageData = { message: encryptedMessage, timestamp };
+    console.log("Sending encrypted message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
   };
@@ -175,12 +223,19 @@ const Chat = () => {
   };
 
   const formatTimestamp = (isoString) => {
-    // Parse the ISO string and format it to a readable time
+    if (!isoString) {
+      console.error("Timestamp is undefined or null:", isoString);
+      return "Invalid Date";
+    }
+
     const date = new Date(isoString);
+    // console.log("Parsed date:", date);
+
     if (isNaN(date.getTime())) {
       console.error("Invalid timestamp format:", isoString);
       return "Invalid Date";
     }
+
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
@@ -196,31 +251,33 @@ const Chat = () => {
           <h2>{getChatHeader()}</h2>{" "}
         </div>
         <div className="chat-messages">
-          {messages.map((msg, index) => (
-            <div key={index} className="message">
-              <span className="timestamp">
-                [{formatTimestamp(msg.timestamp)}]
-              </span>
-              <span className="username">{msg.sender}: </span>
-              {msg.type === "file_uploaded" ? (
-                <button
-                  className="file-link"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    requestFileDownload(msg.filename);
-                  }}
-                >
-                  {msg.filename}
-                </button>
-              ) : (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: formatMessage(msg.message),
-                  }}
-                ></span>
-              )}
-            </div>
-          ))}
+          {messages
+            .filter((msg) => msg.message && msg.timestamp) // Filter out invalid messages
+            .map((msg, index) => (
+              <div key={index} className="message">
+                <span className="timestamp">
+                  [{formatTimestamp(msg.timestamp)}]
+                </span>
+                <span className="username">{msg.sender}: </span>
+                {msg.type === "file_uploaded" ? (
+                  <button
+                    className="file-link"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      requestFileDownload(msg.filename);
+                    }}
+                  >
+                    {msg.filename}
+                  </button>
+                ) : (
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: formatMessage(msg.message),
+                    }}
+                  ></span>
+                )}
+              </div>
+            ))}
         </div>
         <div className="chat-input">
           <textarea
