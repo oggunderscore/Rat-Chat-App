@@ -27,6 +27,68 @@ const Chat = () => {
   const retryCountRef = useRef(0); // Use a ref to track retry attempts
   const socketRef = useRef(null);
   const retryTimeoutRef = useRef(null); // Track the retry timeout
+  const heartbeatIntervalRef = useRef(null);
+  const heartbeatFunctionRef = useRef(null);
+  const pingTimeoutRef = useRef(null);
+
+  // Create the heartbeat function once and store it in a ref
+  useEffect(() => {
+    heartbeatFunctionRef.current = () => {
+      if (socketRef.current?.readyState !== WebSocket.OPEN) {
+        console.log("Connection not open, attempting reconnect...");
+        connectWebSocket();
+        return;
+      }
+
+      // Clear any existing ping timeout
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+
+      const username = localStorage.getItem("username");
+      // Set timeout before sending ping
+      pingTimeoutRef.current = setTimeout(() => {
+        console.log(`Ping timeout - no pong received for user ${username}`);
+        if (socketRef.current) {
+          socketRef.current.close();
+          socketRef.current = null;
+        }
+        connectWebSocket();
+      }, 5000);
+
+      // Send ping with username
+      try {
+        socketRef.current.send(
+          JSON.stringify({
+            type: "ping",
+            username: username,
+          })
+        );
+        console.log(`Ping sent for user ${username}`);
+      } catch (error) {
+        console.error("Error sending ping:", error);
+        clearTimeout(pingTimeoutRef.current);
+        connectWebSocket();
+      }
+    };
+  });
+
+  useEffect(() => {
+    return () => {
+      if (pingTimeoutRef.current) {
+        clearTimeout(pingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const startHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    heartbeatIntervalRef.current = setInterval(() => {
+      heartbeatFunctionRef.current?.();
+    }, 30000); // Hearbeat every 30 seconds
+  }, []);
 
   const connectWebSocket = useCallback(() => {
     if (
@@ -46,10 +108,10 @@ const Chat = () => {
 
     console.log("Connecting to WebSocket server...");
 
-    // Dev: socketRef.current = new WebSocket("ws://localhost:8000");
-    socketRef.current = new WebSocket(
-      "wss://rat-chat-server-production.up.railway.app"
-    );
+    socketRef.current = new WebSocket("ws://localhost:8765");
+    // socketRef.current = new WebSocket(
+    //   "wss://rat-chat-server-production.up.railway.app"
+    // );
 
     socketRef.current.onopen = () => {
       console.log("WebSocket connection opened");
@@ -57,6 +119,7 @@ const Chat = () => {
       const username = localStorage.getItem("username");
       setIsConnected(true);
       retryCountRef.current = 0; // Reset retry count
+      startHeartbeat();
 
       // Clear any pending retry timeout
       if (retryTimeoutRef.current) {
@@ -82,6 +145,9 @@ const Chat = () => {
 
     socketRef.current.onclose = () => {
       console.log("WebSocket connection closed");
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
       if (retryCountRef.current < 5) {
         toast.error("Connection lost. Retrying in 5 seconds...");
         setIsConnected(false);
@@ -94,6 +160,16 @@ const Chat = () => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
         console.log("Received message:", receivedMessage);
+
+        // Handle ping response
+        if (receivedMessage.type === "pong") {
+          console.log("Heartbeat received");
+          if (pingTimeoutRef.current) {
+            clearTimeout(pingTimeoutRef.current);
+            pingTimeoutRef.current = null;
+          }
+          return;
+        }
 
         if (receivedMessage.type === "chatroom_history") {
           const encryptionKey = localStorage.getItem("encryptionKey"); // Retrieve encryption key
@@ -121,9 +197,11 @@ const Chat = () => {
             setMessages((prevMessages) => [...prevMessages, receivedMessage]);
           }
         } else {
-          console.log(
-            `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
-          );
+          if (receivedMessage.chatroom) {
+            console.log(
+              `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
+            );
+          }
         }
 
         if (receivedMessage.type === "online_users") {
@@ -139,7 +217,7 @@ const Chat = () => {
         console.log("Received unknown data type");
       }
     };
-  }, []); // No dependency on currentChat
+  }, [startHeartbeat]); // Add startHeartbeat and connectWebSocket to dependencies
 
   useEffect(() => {
     const username = localStorage.getItem("username");
@@ -159,6 +237,9 @@ const Chat = () => {
     return () => {
       if (socketRef.current) {
         socketRef.current.close();
+      }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
       }
     };
   }, [connectWebSocket]); // Add connectWebSocket as a dependency
