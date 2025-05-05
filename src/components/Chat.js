@@ -46,6 +46,7 @@ const Chat = () => {
 
     console.log("Connecting to WebSocket server...");
 
+    // Dev: socketRef.current = new WebSocket("ws://localhost:8000");
     socketRef.current = new WebSocket(
       "wss://rat-chat-server-production.up.railway.app"
     );
