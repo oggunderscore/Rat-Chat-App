@@ -30,6 +30,8 @@ const Chat = () => {
   const heartbeatIntervalRef = useRef(null);
   const heartbeatFunctionRef = useRef(null);
   const pingTimeoutRef = useRef(null);
+  const [typingUsers, setTypingUsers] = useState(new Set());
+  const typingTimeoutRef = useRef(null);
 
   // Create the heartbeat function once and store it in a ref
   useEffect(() => {
@@ -168,6 +170,19 @@ const Chat = () => {
             clearTimeout(pingTimeoutRef.current);
             pingTimeoutRef.current = null;
           }
+          return;
+        }
+
+        if (receivedMessage.type === "typing_status") {
+          setTypingUsers((prev) => {
+            const newSet = new Set(prev);
+            if (receivedMessage.is_typing) {
+              newSet.add(receivedMessage.username);
+            } else {
+              newSet.delete(receivedMessage.username);
+            }
+            return newSet;
+          });
           return;
         }
 
@@ -375,6 +390,42 @@ const Chat = () => {
     connectWebSocket(); // Attempt to reconnect
   };
 
+  const handleTyping = () => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(
+        JSON.stringify({
+          type: "typing_status",
+          chatroom: currentChat,
+          is_typing: true,
+        })
+      );
+
+      // Clear existing timeout
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Set new timeout to stop typing indicator
+      typingTimeoutRef.current = setTimeout(() => {
+        socketRef.current?.send(
+          JSON.stringify({
+            type: "typing_status",
+            chatroom: currentChat,
+            is_typing: false,
+          })
+        );
+      }, 2000);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="chat-app">
       <ToastContainer position="top-right" autoClose={4000} />
@@ -420,10 +471,21 @@ const Chat = () => {
               </div>
             ))}
         </div>
+        <div className="typing-indicator">
+          {typingUsers.size > 0 && (
+            <span className="typing-text">
+              {Array.from(typingUsers).join(", ")}{" "}
+              {typingUsers.size === 1 ? "is" : "are"} typing...
+            </span>
+          )}
+        </div>
         <div className="chat-input">
           <textarea
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => {
+              setMessage(e.target.value);
+              handleTyping();
+            }}
             onKeyPress={handleKeyPress} // deprecated but works
             placeholder="Type a message... (Use *italic*, **bold**, __underline__, or [link](https://example.com))"
           />
