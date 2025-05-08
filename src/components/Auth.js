@@ -51,11 +51,12 @@ const Auth = () => {
         username,
         email,
         password: hashedPassword,
+        encryptionKey, // Store encryption key in Firebase
         createdAt: new Date().toISOString(),
         lastLoggedIn: new Date().toISOString(),
         loginAttempts: 0,
       });
-      localStorage.setItem("encryptionKey", encryptionKey); // Store encryption key
+      localStorage.setItem("encryptionKey", encryptionKey);
       toast.success("User registered successfully");
       setLoading(false);
       setIsSignUp(false);
@@ -69,7 +70,6 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
     const hashedPassword = hashPassword(password);
-    const encryptionKey = generateEncryptionKey(password); // Generate encryption key
     try {
       const userCredential = await signInWithEmailAndPassword(
         auth,
@@ -80,7 +80,6 @@ const Auth = () => {
       const userDoc = await getDoc(doc(db, "users", user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        console.log("GOOD userData:", userData);
         if (userData.lockUntil && userData.lockUntil > Date.now()) {
           toast.error("Account is locked. Try again later.");
           setLoading(false);
@@ -93,7 +92,7 @@ const Auth = () => {
           });
           localStorage.setItem("isLoggedIn", "true");
           localStorage.setItem("username", userData.username);
-          localStorage.setItem("encryptionKey", encryptionKey); // Store encryption key
+          localStorage.setItem("encryptionKey", userData.encryptionKey); // Get encryption key from Firebase
           toast.success("User signed in successfully");
           setLoading(false);
           setTimeout(() => {
@@ -101,7 +100,6 @@ const Auth = () => {
           }, 1000);
         } else {
           const attempts = (userData.loginAttempts || 0) + 1;
-          console.log("attempts:", attempts);
           if (attempts >= MAX_ATTEMPTS) {
             await updateDoc(doc(db, "users", user.uid), {
               loginAttempts: attempts,
@@ -121,16 +119,11 @@ const Auth = () => {
         setLoading(false);
       }
     } catch (error) {
-      console.log("Attempting to fetch user document", email);
       const userQuery = doc(db, "users", email); // Use email to fetch the user document
-      console.log("userQuery:", userQuery);
       const userDoc = await getDoc(userQuery);
-      console.log("userDoc:", userDoc);
       if (userDoc.exists()) {
-        console.log("User exists");
         const userData = userDoc.data();
         const attempts = (userData.loginAttempts || 0) + 1;
-        console.log("attempts:", attempts);
         if (attempts >= MAX_ATTEMPTS) {
           await updateDoc(userQuery, {
             loginAttempts: attempts,
