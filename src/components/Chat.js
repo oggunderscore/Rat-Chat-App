@@ -533,9 +533,15 @@ const Chat = () => {
     const reader = new FileReader();
     let offset = 0;
     const fileId = Math.random().toString(36).substring(7);
+    const username = localStorage.getItem("username");
 
     const sendChunk = (chunk, isLastChunk) => {
       const encryptedChunk = encryptMessage(chunk, globalEncryptionKey);
+      const uploadMessage = encryptMessage(
+        `${username} uploaded ${file.name}`,
+        globalEncryptionKey
+      );
+
       const metadata = JSON.stringify({
         type: "upload_file_chunk",
         fileId: fileId,
@@ -544,6 +550,9 @@ const Chat = () => {
         offset: offset,
         isLastChunk: isLastChunk,
         totalSize: file.size,
+        chatroom: currentChat,
+        uploadMessage: uploadMessage,
+        timestamp: new Date().toISOString(),
       });
 
       if (socketRef.current?.readyState === WebSocket.OPEN) {
