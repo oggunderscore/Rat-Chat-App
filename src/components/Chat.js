@@ -139,30 +139,39 @@ const Chat = () => {
           setUserKeys((prev) => ({ ...prev, ...newKeys }));
           pendingKeyFetches.current.clear();
           console.log("[KeyFetch] Keys updated:", newKeys);
+
+          // Revisit message history and decrypt messages
+          setMessages((messages) =>
+            messages.map((msg) => {
+              if (msg.sender && newKeys[msg.sender] && msg.message) {
+                console.log(
+                  `[KeyFetch] Attempting to decrypt message from ${msg.sender} | ${msg.message}`
+                );
+                try {
+                  msg.message = decryptMessage(
+                    msg.message,
+                    newKeys[msg.sender]
+                  );
+                  console.log(
+                    `[KeyFetch] Successfully decrypted message from ${msg.sender}: ${msg.message}`
+                  );
+                } catch (error) {
+                  console.error(
+                    `[KeyFetch] Failed to decrypt message from ${msg.sender}:`,
+                    error
+                  );
+                  // msg.message = "[Encrypted Message]";
+                }
+              }
+              return msg;
+            })
+          );
         } catch (error) {
           console.error("[KeyFetch] Error batch fetching keys:", error);
         }
       }, 100); // Debounce 100ms
     },
     [userKeys]
-  );
-
-  const fetchMissingKeys = useCallback(
-    async (messages) => {
-      const uniqueSenders = new Set(
-        messages.map((msg) => {
-          const parsed = typeof msg === "string" ? JSON.parse(msg) : msg;
-          return parsed.sender;
-        })
-      );
-
-      const missingKeys = [...uniqueSenders].filter(
-        (sender) => !userKeys[sender]
-      );
-
-      await Promise.all(missingKeys.map(fetchUserKey));
-    },
-    [userKeys, fetchUserKey]
   );
 
   // Create the heartbeat function once and store it in a ref
@@ -213,20 +222,41 @@ const Chat = () => {
 
       const decryptAndAppend = async () => {
         try {
-          const senderKey = userKeys[receivedMessage.sender];
+          let senderKey = userKeys[receivedMessage.sender];
           if (!senderKey) {
+            console.log(
+              `[Debug] No key for ${receivedMessage.sender}, fetching...`
+            );
             await fetchUserKey(receivedMessage.sender);
-            return; // Will be handled in next render when keys are updated
+            // Wait briefly for state update
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            // Get updated key
+            senderKey = userKeys[receivedMessage.sender];
+            if (!senderKey) {
+              console.log(
+                `[Debug] Key fetch failed for ${receivedMessage.sender}`
+              );
+              // receivedMessage.message = "[Encrypted Message]";
+              setMessages((prev) => [...prev, receivedMessage]);
+              return;
+            }
+            console.log(
+              `[Debug] Got key for ${receivedMessage.sender}, attempting decrypt`
+            );
           }
 
+          console.log(
+            `[Debug] Decrypting message from ${receivedMessage.sender}`
+          );
           receivedMessage.message = decryptMessage(
             receivedMessage.message,
             senderKey
           );
+          console.log(`[Debug] Decrypted message: ${receivedMessage.message}`);
           setMessages((prev) => [...prev, receivedMessage]);
         } catch (error) {
-          console.error("Decryption error:", error);
-          receivedMessage.message = "[Encrypted Message]";
+          console.error("[Debug] Decryption error:", error);
+          // receivedMessage.message = "[Encrypted Message]";
           setMessages((prev) => [...prev, receivedMessage]);
         }
       };
@@ -445,28 +475,28 @@ const Chat = () => {
           console.log(
             `[History] Processing ${receivedMessage.history.length} messages`
           );
-          // Wait for all keys to be fetched before processing messages
-          await fetchMissingKeys(receivedMessage.history);
 
-          const decryptedHistory = await Promise.all(
-            receivedMessage.history.map(async (msg) => {
+          // Fetch all missing keys before decrypting messages
+          const uniqueSenders = new Set(
+            receivedMessage.history.map((msg) => {
               const parsedMessage = JSON.parse(msg);
-              if (parsedMessage.message && parsedMessage.sender) {
-                try {
-                  // Wait for the key to be available
-                  if (!userKeys[parsedMessage.sender]) {
-                    console.log(
-                      `[Debug] Waiting for key for ${parsedMessage.sender}...`
-                    );
-                    await new Promise((resolve) => setTimeout(resolve, 500)); // Small delay
-                    if (!userKeys[parsedMessage.sender]) {
-                      console.log(
-                        `[Debug] Key fetch timeout for ${parsedMessage.sender}`
-                      );
-                      return parsedMessage;
-                    }
-                  }
+              return parsedMessage.sender;
+            })
+          );
 
+          const missingKeys = [...uniqueSenders].filter(
+            (sender) => !userKeys[sender]
+          );
+
+          await Promise.all(missingKeys.map(fetchUserKey)); // Ensure all keys are fetched
+
+          console.log("[History] User keys after fetch:", userKeys);
+
+          const decryptedHistory = receivedMessage.history.map((msg) => {
+            const parsedMessage = JSON.parse(msg);
+            if (parsedMessage.message && parsedMessage.sender) {
+              try {
+                if (userKeys[parsedMessage.sender]) {
                   parsedMessage.message = decryptMessage(
                     parsedMessage.message,
                     userKeys[parsedMessage.sender]
@@ -474,17 +504,22 @@ const Chat = () => {
                   console.log(
                     `[Debug] Successfully decrypted message from ${parsedMessage.sender}: ${parsedMessage.message}`
                   );
-                } catch (error) {
-                  console.error(
-                    `[Debug] Decryption error for ${parsedMessage.sender}:`,
-                    error
+                } else {
+                  console.log(
+                    `[Debug] Missing key for ${parsedMessage.sender}, marking as encrypted`
                   );
-                  parsedMessage.message = "[Encrypted Message]";
+                  // parsedMessage.message = "[Encrypted Message]";
                 }
+              } catch (error) {
+                console.error(
+                  `[Debug] Decryption error for ${parsedMessage.sender}:`,
+                  error
+                );
+                // parsedMessage.message = "[Encrypted Message]";
               }
-              return parsedMessage;
-            })
-          );
+            }
+            return parsedMessage;
+          });
 
           console.log(
             `[History] Processed ${decryptedHistory.length} messages`
@@ -526,7 +561,6 @@ const Chat = () => {
     handleFileDownload,
     userKeys,
     fetchUserKey,
-    fetchMissingKeys,
     isInitializing,
     handleIncomingMessage,
     globalEncryptionKey,
