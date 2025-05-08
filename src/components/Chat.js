@@ -7,7 +7,14 @@ import CryptoJS from "crypto-js";
 import { ToastContainer, toast } from "react-toastify"; // Add toast notifications
 import "react-toastify/dist/ReactToastify.css";
 import { db, auth } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
 const encryptMessage = (message, key) => {
@@ -37,6 +44,7 @@ const Chat = () => {
   const typingTimeoutRef = useRef(null);
   const [globalEncryptionKey, setGlobalEncryptionKey] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [userKeys, setUserKeys] = useState({});
 
   useEffect(() => {
     // Set up auth state listener
@@ -71,6 +79,26 @@ const Chat = () => {
     },
     [globalEncryptionKey]
   );
+
+  const fetchUserKey = useCallback(async (username) => {
+    try {
+      // Get all users and find the one matching username
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("username", "==", username));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const userData = querySnapshot.docs[0].data();
+        setUserKeys((prev) => ({
+          ...prev,
+          [username]: userData.encryptionKey,
+        }));
+        return userData.encryptionKey;
+      }
+    } catch (error) {
+      console.error(`Error fetching key for user ${username}:`, error);
+    }
+  }, []);
 
   // Create the heartbeat function once and store it in a ref
   useEffect(() => {
@@ -178,6 +206,12 @@ const Chat = () => {
           chatroom: currentChatRef.current,
         }) // Use currentChatRef
       );
+      socketRef.current.send(
+        JSON.stringify({
+          type: "get_online_users",
+          username: localStorage.getItem("username"),
+        })
+      );
     };
 
     socketRef.current.onerror = (error) => {
@@ -225,18 +259,26 @@ const Chat = () => {
           return;
         }
 
+        if (receivedMessage.type === "online_users") {
+          setOnlineUsers(receivedMessage.users); // Update online users
+          receivedMessage.users.forEach((username) => {
+            if (!userKeys[username]) {
+              fetchUserKey(username);
+            }
+          });
+          return;
+        }
+
         if (receivedMessage.type === "chatroom_history") {
-          if (!globalEncryptionKey) {
-            console.error("Global encryption key not available");
-            return;
-          }
           const decryptedHistory = receivedMessage.history.map((msg) => {
             const parsedMessage = JSON.parse(msg);
-            if (parsedMessage.message) {
+            if (parsedMessage.message && parsedMessage.sender) {
               try {
+                const senderKey = userKeys[parsedMessage.sender];
+                if (!senderKey) return parsedMessage; // Skip if no key yet
                 parsedMessage.message = decryptMessage(
                   parsedMessage.message,
-                  globalEncryptionKey
+                  senderKey
                 );
               } catch (error) {
                 console.error("Decryption error:", error);
@@ -248,13 +290,15 @@ const Chat = () => {
           setMessages(decryptedHistory); // Load decrypted chatroom history
         } else if (receivedMessage.chatroom === currentChatRef.current) {
           // Append live messages for the current chatroom
-          if (receivedMessage.message && globalEncryptionKey) {
+          if (receivedMessage.message && receivedMessage.sender) {
             try {
-              const decryptedMessage = decryptMessage(
-                receivedMessage.message,
-                globalEncryptionKey
-              );
-              receivedMessage.message = decryptedMessage; // Replace encrypted message with decrypted one
+              const senderKey = userKeys[receivedMessage.sender];
+              if (senderKey) {
+                receivedMessage.message = decryptMessage(
+                  receivedMessage.message,
+                  senderKey
+                );
+              }
               setMessages((prevMessages) => [...prevMessages, receivedMessage]);
             } catch (error) {
               console.error("Decryption error:", error);
@@ -270,9 +314,7 @@ const Chat = () => {
           }
         }
 
-        if (receivedMessage.type === "online_users") {
-          setOnlineUsers(receivedMessage.users); // Update online users
-        } else if (receivedMessage.type === "file_download") {
+        if (receivedMessage.type === "file_download") {
           console.log("Downloading file");
           handleFileDownload(
             receivedMessage.file_data,
@@ -283,7 +325,7 @@ const Chat = () => {
         console.log("Received unknown data type");
       }
     };
-  }, [startHeartbeat, globalEncryptionKey, handleFileDownload]); // Add startHeartbeat and connectWebSocket to dependencies
+  }, [startHeartbeat, handleFileDownload, userKeys, fetchUserKey]); // Add startHeartbeat and connectWebSocket to dependencies
 
   const fetchGlobalEncryptionKey = useCallback(async () => {
     try {
@@ -370,6 +412,7 @@ const Chat = () => {
     fetchGlobalEncryptionKey,
     isAuthReady,
     globalEncryptionKey,
+    userKeys,
   ]);
 
   const sendMessage = () => {
