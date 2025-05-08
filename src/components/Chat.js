@@ -258,14 +258,14 @@ const Chat = () => {
               console.log(
                 `[Debug] Missing key for ${parsedMessage.sender}, marking as encrypted`
               );
-              parsedMessage.message = "[Encrypted Message]";
+              // parsedMessage.message = "[Encrypted Message]";
             }
           } catch (error) {
             console.error(
               `[Debug] Decryption error for ${parsedMessage.sender}:`,
               error
             );
-            parsedMessage.message = "[Encrypted Message]";
+            // parsedMessage.message = "[Encrypted Message]";
           }
         }
         return parsedMessage;
@@ -287,7 +287,7 @@ const Chat = () => {
           console.error(
             `[Debug] Missing key for ${receivedMessage.sender}, cannot decrypt`
           );
-          receivedMessage.message = "[Encrypted Message]";
+          // receivedMessage.message = "[Encrypted Message]";
         } else {
           receivedMessage.message = decryptMessage(
             receivedMessage.message,
@@ -300,7 +300,7 @@ const Chat = () => {
         setMessages((prev) => [...prev, receivedMessage]);
       } catch (error) {
         console.error("[Debug] Decryption error:", error);
-        receivedMessage.message = "[Encrypted Message]";
+        // receivedMessage.message = "[Encrypted Message]";
         setMessages((prev) => [...prev, receivedMessage]);
       }
     },
