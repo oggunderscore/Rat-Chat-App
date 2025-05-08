@@ -47,6 +47,15 @@ const Chat = () => {
   const [globalEncryptionKey, setGlobalEncryptionKey] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [userKeys, setUserKeys] = useState({});
+  const pendingKeyFetches = useRef(new Set());
+  const keyFetchTimeout = useRef(null);
+
+  const [isInitializing, setIsInitializing] = useState(false);
+  const initTimeoutRef = useRef(null);
+  const expectedMessagesRef = useRef(0);
+  const receivedMessagesRef = useRef(0);
+
+  const [isInitializationPending, setIsInitializationPending] = useState(false);
 
   useEffect(() => {
     // Set up auth state listener
@@ -82,27 +91,61 @@ const Chat = () => {
     [globalEncryptionKey]
   );
 
-  const fetchUserKey = useCallback(async (username) => {
-    console.log(`[KeyFetch] Attempting to fetch key for user: ${username}`);
-    try {
-      const usersRef = collection(db, "users");
-      const q = query(usersRef, where("username", "==", username));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        const userData = querySnapshot.docs[0].data();
-        console.log(`[KeyFetch] Found key for ${username}`);
-        setUserKeys((prev) => {
-          console.log(`[KeyStore] Storing key for ${username}`);
-          return { ...prev, [username]: userData.encryptionKey };
-        });
-        return userData.encryptionKey;
+  const fetchUserKey = useCallback(
+    async (username) => {
+      if (
+        !username ||
+        userKeys[username] ||
+        pendingKeyFetches.current.has(username)
+      ) {
+        return null;
       }
-      console.log(`[KeyFetch] No key found for ${username}`);
-    } catch (error) {
-      console.error(`[KeyFetch] Error fetching key for ${username}:`, error);
-    }
-  }, []);
+
+      console.log(`[KeyFetch] Queueing fetch for: ${username}`);
+      pendingKeyFetches.current.add(username);
+
+      // Clear existing timeout
+      if (keyFetchTimeout.current) {
+        clearTimeout(keyFetchTimeout.current);
+      }
+
+      // Debounce key fetching
+      keyFetchTimeout.current = setTimeout(async () => {
+        if (pendingKeyFetches.current.size === 0) return;
+
+        try {
+          const usersRef = collection(db, "users");
+          const usernames = [...pendingKeyFetches.current];
+
+          console.log(usernames);
+
+          // Batch fetch keys
+          const snapshots = await Promise.all(
+            usernames.map(async (name) => {
+              const q = query(usersRef, where("username", "==", name));
+              return getDocs(q);
+            })
+          );
+
+          const newKeys = {};
+          snapshots.forEach((snapshot, index) => {
+            if (!snapshot.empty) {
+              const userData = snapshot.docs[0].data();
+              newKeys[usernames[index]] = userData.encryptionKey;
+            }
+          });
+
+          // Batch update keys
+          setUserKeys((prev) => ({ ...prev, ...newKeys }));
+          pendingKeyFetches.current.clear();
+          console.log("[KeyFetch] Keys updated:", newKeys);
+        } catch (error) {
+          console.error("[KeyFetch] Error batch fetching keys:", error);
+        }
+      }, 100); // Debounce 100ms
+    },
+    [userKeys]
+  );
 
   const fetchMissingKeys = useCallback(
     async (messages) => {
@@ -125,11 +168,11 @@ const Chat = () => {
   // Create the heartbeat function once and store it in a ref
   useEffect(() => {
     heartbeatFunctionRef.current = () => {
-      if (socketRef.current?.readyState !== WebSocket.OPEN) {
-        console.log("Connection not open, attempting reconnect...");
-        connectWebSocket();
-        return;
-      }
+      // if (socketRef.current?.readyState !== WebSocket.OPEN) {
+      //   console.log("Connection not open, attempting reconnect...");
+      //   connectWebSocket();
+      //   return;
+      // }
 
       // Clear any existing ping timeout
       if (pingTimeoutRef.current) {
@@ -164,6 +207,35 @@ const Chat = () => {
     };
   });
 
+  const handleIncomingMessage = useCallback(
+    (receivedMessage) => {
+      if (!receivedMessage.sender || !receivedMessage.message) return;
+
+      const decryptAndAppend = async () => {
+        try {
+          const senderKey = userKeys[receivedMessage.sender];
+          if (!senderKey) {
+            await fetchUserKey(receivedMessage.sender);
+            return; // Will be handled in next render when keys are updated
+          }
+
+          receivedMessage.message = decryptMessage(
+            receivedMessage.message,
+            senderKey
+          );
+          setMessages((prev) => [...prev, receivedMessage]);
+        } catch (error) {
+          console.error("Decryption error:", error);
+          receivedMessage.message = "[Encrypted Message]";
+          setMessages((prev) => [...prev, receivedMessage]);
+        }
+      };
+
+      decryptAndAppend();
+    },
+    [userKeys, fetchUserKey]
+  );
+
   useEffect(() => {
     return () => {
       if (pingTimeoutRef.current) {
@@ -182,31 +254,56 @@ const Chat = () => {
   }, []);
 
   const connectWebSocket = useCallback(() => {
+    console.log("[Debug] connectWebSocket called with deps:", {
+      userKeys: Object.keys(userKeys),
+      isInitializing,
+      globalEncryptionKey: !!globalEncryptionKey,
+    });
+
+    if (isInitializing) {
+      console.log("[Debug] Connection in progress, skipping reconnect");
+      return;
+    }
+
+    // Add additional state check
+    if (socketRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log("[Debug] Socket is currently connecting");
+      return;
+    }
+
     if (
       socketRef.current &&
       socketRef.current.readyState !== WebSocket.CLOSED
     ) {
-      console.log("WebSocket is already connected or connecting");
-      return;
-    }
-
-    if (retryCountRef.current >= 5) {
-      toast.error(
-        "Failed to reconnect after 5 attempts. Please refresh to try again."
+      console.log(
+        "[Debug] Socket already exists in state:",
+        socketRef.current.readyState
       );
       return;
     }
 
     console.log("Connecting to WebSocket server...");
 
-    // socketRef.current = new WebSocket("ws://localhost:8765");
-    socketRef.current = new WebSocket(
-      "wss://rat-chat-server-production.up.railway.app"
-    );
+    socketRef.current = new WebSocket("ws://localhost:8765");
+    // socketRef.current = new WebSocket(
+    //   "wss://rat-chat-server-production.up.railway.app"
+    // );
 
     socketRef.current.onopen = () => {
-      console.log("WebSocket connection opened");
-      toast.success("Connected to WebSocket server!");
+      console.log("[Debug] WebSocket connection established");
+      setIsInitializing(true);
+      expectedMessagesRef.current = 2; // Expect history and online users
+      receivedMessagesRef.current = 0;
+
+      // Set initialization timeout
+      initTimeoutRef.current = setTimeout(() => {
+        if (isInitializing) {
+          console.log("[Debug] Initialization timed out");
+          setIsInitializing(false);
+          socketRef.current?.close(4000, "Initialization timeout");
+        }
+      }, 5000);
+
       const username = localStorage.getItem("username");
       setIsConnected(true);
       retryCountRef.current = 0; // Reset retry count
@@ -218,7 +315,8 @@ const Chat = () => {
         retryTimeoutRef.current = null;
       }
 
-      console.log("User: ", username);
+      console.log("User: ", username, "Chatroom: ", currentChatRef.current);
+
       socketRef.current.send(
         JSON.stringify({ username, chatroom: currentChatRef.current }) // Use currentChatRef
       );
@@ -234,29 +332,81 @@ const Chat = () => {
           username: localStorage.getItem("username"),
         })
       );
+      toast.success("Connected to Websocket server!");
     };
 
     socketRef.current.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
 
-    socketRef.current.onclose = () => {
-      console.log("WebSocket connection closed");
+    socketRef.current.onclose = (event) => {
+      // Clear initialization state
+      clearTimeout(initTimeoutRef.current);
+      setIsInitializing(false);
+      receivedMessagesRef.current = 0;
+
+      console.log(
+        `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`
+      );
+
+      // Handle specific close scenarios
+      const closeMessages = {
+        1000: "Normal closure",
+        1001: "Server is going down or browser navigated away",
+        1002: "Protocol error",
+        1003: "Invalid data received",
+        1005: "No status code present",
+        1006: "Connection lost abnormally",
+        1007: "Invalid frame payload data",
+        1008: "Policy violation",
+        1009: "Message too big",
+        1010: "Extension negotiation failed",
+        1011: "Server error",
+        1015: "TLS handshake failed",
+      };
+
+      const closeMessage = closeMessages[event.code] || "Unknown reason";
+      console.log(`Close reason: ${closeMessage}`);
+
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
       }
-      if (retryCountRef.current < 5) {
-        toast.info("Attempting to connect to server...");
-        setIsConnected(false);
-        retryCountRef.current += 1; // Increment retry count
-        retryTimeoutRef.current = setTimeout(connectWebSocket, 5000); // Retry after 5 seconds
+
+      // Only attempt reconnect if not a clean closure and not initializing
+      if (event.code !== 1000 && event.code !== 1001 && !isInitializing) {
+        if (retryCountRef.current < 5) {
+          toast.info(`Attempting to connect to server...`);
+          setIsConnected(false);
+          retryCountRef.current += 1;
+          retryTimeoutRef.current = setTimeout(connectWebSocket, 5000);
+        } else {
+          toast.error(`Server connection failed after 5 attempts`);
+        }
       }
     };
 
-    socketRef.current.onmessage = (event) => {
+    socketRef.current.onmessage = async (event) => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
         console.log("Received message:", receivedMessage);
+
+        // Track initialization messages
+        if (
+          isInitializing &&
+          (receivedMessage.type === "chatroom_history" ||
+            receivedMessage.type === "online_users")
+        ) {
+          receivedMessagesRef.current++;
+          console.log(
+            `[Debug] Init message received: ${receivedMessagesRef.current}/${expectedMessagesRef.current}`
+          );
+
+          if (receivedMessagesRef.current >= expectedMessagesRef.current) {
+            console.log("[Debug] Initialization complete");
+            clearTimeout(initTimeoutRef.current);
+            setIsInitializing(false);
+          }
+        }
 
         // Handle ping response
         if (receivedMessage.type === "pong") {
@@ -295,82 +445,53 @@ const Chat = () => {
           console.log(
             `[History] Processing ${receivedMessage.history.length} messages`
           );
-          fetchMissingKeys(receivedMessage.history).then(() => {
-            const decryptedHistory = receivedMessage.history.map((msg) => {
+          // Wait for all keys to be fetched before processing messages
+          await fetchMissingKeys(receivedMessage.history);
+
+          const decryptedHistory = await Promise.all(
+            receivedMessage.history.map(async (msg) => {
               const parsedMessage = JSON.parse(msg);
               if (parsedMessage.message && parsedMessage.sender) {
                 try {
+                  // Wait for the key to be available
                   if (!userKeys[parsedMessage.sender]) {
-                    // console.log(
-                    //   `[Decrypt] No key for ${parsedMessage.sender}, fetching...`
-                    // );
-                    fetchUserKey(parsedMessage.sender);
-                    return parsedMessage;
+                    console.log(
+                      `[Debug] Waiting for key for ${parsedMessage.sender}...`
+                    );
+                    await new Promise((resolve) => setTimeout(resolve, 500)); // Small delay
+                    if (!userKeys[parsedMessage.sender]) {
+                      console.log(
+                        `[Debug] Key fetch timeout for ${parsedMessage.sender}`
+                      );
+                      return parsedMessage;
+                    }
                   }
-                  // console.log(
-                  //   `[Decrypt] Decrypting message from ${parsedMessage.sender}`
-                  // );
+
                   parsedMessage.message = decryptMessage(
                     parsedMessage.message,
                     userKeys[parsedMessage.sender]
                   );
-                  // console.log(
-                  //   `[Decrypt] Successfully decrypted message from ${parsedMessage.sender}`
-                  // );
+                  console.log(
+                    `[Debug] Successfully decrypted message from ${parsedMessage.sender}: ${parsedMessage.message}`
+                  );
                 } catch (error) {
-                  // console.error(
-                  //   `[Decrypt] Error decrypting message from ${parsedMessage.sender}:`,
-                  //   error
-                  // );
+                  console.error(
+                    `[Debug] Decryption error for ${parsedMessage.sender}:`,
+                    error
+                  );
                   parsedMessage.message = "[Encrypted Message]";
                 }
               }
               return parsedMessage;
-            });
-            console.log(
-              `[History] Processed ${decryptedHistory.length} messages`
-            );
-            setMessages(decryptedHistory);
-          });
+            })
+          );
+
+          console.log(
+            `[History] Processed ${decryptedHistory.length} messages`
+          );
+          setMessages(decryptedHistory);
         } else if (receivedMessage.chatroom === currentChatRef.current) {
-          if (receivedMessage.message && receivedMessage.sender) {
-            // Fetch key for new sender if needed
-            if (!userKeys[receivedMessage.sender]) {
-              fetchUserKey(receivedMessage.sender).then(() => {
-                try {
-                  if (userKeys[receivedMessage.sender]) {
-                    receivedMessage.message = decryptMessage(
-                      receivedMessage.message,
-                      userKeys[receivedMessage.sender]
-                    );
-                  }
-                  setMessages((prevMessages) => [
-                    ...prevMessages,
-                    receivedMessage,
-                  ]);
-                } catch (error) {
-                  console.error("Decryption error:", error);
-                  receivedMessage.message = "[Encrypted Message]";
-                  setMessages((prevMessages) => [
-                    ...prevMessages,
-                    receivedMessage,
-                  ]);
-                }
-              });
-              return;
-            }
-            try {
-              receivedMessage.message = decryptMessage(
-                receivedMessage.message,
-                userKeys[receivedMessage.sender]
-              );
-              setMessages((prevMessages) => [...prevMessages, receivedMessage]);
-            } catch (error) {
-              console.error("Decryption error:", error);
-              receivedMessage.message = "[Encrypted Message]";
-              setMessages((prevMessages) => [...prevMessages, receivedMessage]);
-            }
-          }
+          handleIncomingMessage(receivedMessage);
         } else {
           if (receivedMessage.chatroom) {
             console.log(
@@ -406,11 +527,15 @@ const Chat = () => {
     userKeys,
     fetchUserKey,
     fetchMissingKeys,
-  ]); // Add startHeartbeat and connectWebSocket to dependencies
+    isInitializing,
+    handleIncomingMessage,
+    globalEncryptionKey,
+  ]);
 
   const fetchGlobalEncryptionKey = useCallback(async () => {
     try {
       if (!isAuthReady) {
+        console.log("[Debug] Auth not ready, retrying...");
         await new Promise((resolve) => setTimeout(resolve, 1000));
         return fetchGlobalEncryptionKey();
       }
@@ -421,15 +546,29 @@ const Chat = () => {
       }
 
       const userDoc = await getDoc(doc(db, "users", user.uid));
-      console.log("User Document: ", userDoc.data());
-      if (userDoc.exists() && userDoc.data().encryptionKey) {
-        const key = userDoc.data().encryptionKey;
-        console.log("Fetched encryption key:", key);
-        await new Promise((resolve) => {
-          setGlobalEncryptionKey(key);
-          // Wait for state to update
-          setTimeout(resolve, 100);
-        });
+      const userData = userDoc.data();
+      console.log("[Debug] User Document updated:", userData);
+
+      if (userDoc.exists() && userData.encryptionKey) {
+        const key = userData.encryptionKey;
+        const username = localStorage.getItem("username");
+        console.log("[Debug] Setting encryption key for", username);
+
+        // Update states sequentially to ensure proper order
+        await Promise.all([
+          new Promise((resolve) => {
+            setUserKeys((prev) => {
+              console.log("[Debug] Updating userKeys");
+              return { ...prev, [username]: key };
+            });
+            resolve();
+          }),
+          new Promise((resolve) => {
+            setGlobalEncryptionKey(key);
+            resolve();
+          }),
+        ]);
+
         return key;
       } else {
         throw new Error("Encryption key not found for user");
@@ -444,56 +583,64 @@ const Chat = () => {
 
   useEffect(() => {
     const initializeChat = async () => {
+      if (isInitializationPending) {
+        console.log("[Debug] Initialization already in progress");
+        return;
+      }
+
       const username = localStorage.getItem("username");
       const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
 
       if (!username || !isLoggedIn || !isAuthReady) {
-        console.log("Not ready to initialize chat");
+        console.log("[Debug] Not ready to initialize chat:", {
+          username,
+          isLoggedIn,
+          isAuthReady,
+        });
         return;
       }
 
       try {
-        if (
-          !socketRef.current ||
-          socketRef.current.readyState === WebSocket.CLOSED
-        ) {
+        setIsInitializationPending(true);
+
+        if (!globalEncryptionKey) {
+          console.log("[Debug] Fetching global encryption key");
           const key = await fetchGlobalEncryptionKey();
           if (!key) {
             throw new Error("Failed to fetch encryption key");
           }
-          // Ensure encryption key is set in state before connecting
-          if (!globalEncryptionKey) {
-            console.log("Waiting for encryption key to be set in state");
-            return;
-          }
+          // Wait for the next render when globalEncryptionKey is set
+          return;
+        }
+
+        if (
+          !socketRef.current ||
+          socketRef.current.readyState === WebSocket.CLOSED
+        ) {
           setUser(username);
-          console.log("Pre-User: ", username);
+          console.log(
+            "[Debug] Starting WebSocket connection with encryption key:",
+            !!globalEncryptionKey
+          );
           connectWebSocket();
         }
       } catch (error) {
-        console.error("Failed to initialize chat:", error);
+        console.error("[Debug] Failed to initialize chat:", error);
         toast.error("Failed to initialize chat. Please refresh the page.");
+      } finally {
+        setIsInitializationPending(false);
       }
     };
 
     if (isAuthReady) {
       initializeChat();
     }
-
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-      }
-    };
   }, [
-    connectWebSocket,
-    fetchGlobalEncryptionKey,
     isAuthReady,
     globalEncryptionKey,
-    userKeys,
+    connectWebSocket,
+    fetchGlobalEncryptionKey,
+    isInitializationPending,
   ]);
 
   const sendMessage = () => {
@@ -706,6 +853,22 @@ const Chat = () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (keyFetchTimeout.current) {
+        clearTimeout(keyFetchTimeout.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setIsInitializing(false);
+      clearTimeout(initTimeoutRef.current);
+      clearTimeout(retryTimeoutRef.current);
     };
   }, []);
 
