@@ -26,6 +26,8 @@ const decryptMessage = (encryptedMessage, key) => {
   return bytes.toString(CryptoJS.enc.Utf8);
 };
 
+const MAX_CHUNK_SIZE = 16384; // 16KB chunks
+
 const Chat = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
@@ -299,27 +301,27 @@ const Chat = () => {
               if (parsedMessage.message && parsedMessage.sender) {
                 try {
                   if (!userKeys[parsedMessage.sender]) {
-                    console.log(
-                      `[Decrypt] No key for ${parsedMessage.sender}, fetching...`
-                    );
+                    // console.log(
+                    //   `[Decrypt] No key for ${parsedMessage.sender}, fetching...`
+                    // );
                     fetchUserKey(parsedMessage.sender);
                     return parsedMessage;
                   }
-                  console.log(
-                    `[Decrypt] Decrypting message from ${parsedMessage.sender}`
-                  );
+                  // console.log(
+                  //   `[Decrypt] Decrypting message from ${parsedMessage.sender}`
+                  // );
                   parsedMessage.message = decryptMessage(
                     parsedMessage.message,
                     userKeys[parsedMessage.sender]
                   );
-                  console.log(
-                    `[Decrypt] Successfully decrypted message from ${parsedMessage.sender}`
-                  );
+                  // console.log(
+                  //   `[Decrypt] Successfully decrypted message from ${parsedMessage.sender}`
+                  // );
                 } catch (error) {
-                  console.error(
-                    `[Decrypt] Error decrypting message from ${parsedMessage.sender}:`,
-                    error
-                  );
+                  // console.error(
+                  //   `[Decrypt] Error decrypting message from ${parsedMessage.sender}:`,
+                  //   error
+                  // );
                   parsedMessage.message = "[Encrypted Message]";
                 }
               }
@@ -383,6 +385,16 @@ const Chat = () => {
             receivedMessage.file_data,
             receivedMessage.filename
           );
+        }
+
+        // Add file upload status handling
+        if (receivedMessage.type === "file_upload_status") {
+          if (receivedMessage.status === "success") {
+            toast.success("File uploaded successfully!");
+          } else if (receivedMessage.status === "error") {
+            toast.error(receivedMessage.message || "File upload failed");
+          }
+          return;
         }
       } else {
         console.log("Received unknown data type");
@@ -519,20 +531,68 @@ const Chat = () => {
     if (!isConnected || !globalEncryptionKey) return;
 
     const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const fileData = reader.result.split(",")[1]; // Get base64 part
-      const encryptedFileData = encryptMessage(fileData, globalEncryptionKey); // Encrypt file data
+    let offset = 0;
+    const fileId = Math.random().toString(36).substring(7);
 
+    const sendChunk = (chunk, isLastChunk) => {
+      const encryptedChunk = encryptMessage(chunk, globalEncryptionKey);
       const metadata = JSON.stringify({
-        type: "upload_file",
+        type: "upload_file_chunk",
+        fileId: fileId,
         fileName: file.name,
-        fileData: encryptedFileData, // Send encrypted file data
+        chunk: encryptedChunk,
+        offset: offset,
+        isLastChunk: isLastChunk,
+        totalSize: file.size,
       });
 
-      console.log("Sending encrypted file metadata and data:", metadata);
-      socketRef.current.send(metadata);
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        try {
+          socketRef.current.send(metadata);
+          console.log(`[Upload] Sent chunk ${offset}/${file.size}`);
+        } catch (error) {
+          console.error("Error sending chunk:", error);
+          toast.error("File upload failed. Please try again.");
+        }
+      } else {
+        toast.error("Connection lost during upload. Please try again.");
+      }
     };
+
+    reader.onload = (e) => {
+      const fileData = e.target.result.split(",")[1];
+      const fileDataArray = new Uint8Array(
+        atob(fileData)
+          .split("")
+          .map((c) => c.charCodeAt(0))
+      );
+      const totalChunks = Math.ceil(fileDataArray.length / MAX_CHUNK_SIZE);
+
+      console.log(
+        `[Upload] Starting file upload of ${file.name} in ${totalChunks} chunks`
+      );
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = fileDataArray.slice(
+          i * MAX_CHUNK_SIZE,
+          (i + 1) * MAX_CHUNK_SIZE
+        );
+        const base64Chunk = btoa(String.fromCharCode.apply(null, chunk));
+        offset = i * MAX_CHUNK_SIZE;
+        const isLastChunk = i === totalChunks - 1;
+
+        // Add delay between chunks to prevent connection issues
+        setTimeout(() => {
+          sendChunk(base64Chunk, isLastChunk);
+        }, i * 100);
+      }
+    };
+
+    reader.onerror = () => {
+      toast.error("Error reading file. Please try again.");
+    };
+
+    reader.readAsDataURL(file);
   };
 
   const requestFileDownload = (filename) => {
