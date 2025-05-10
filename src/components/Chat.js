@@ -582,6 +582,8 @@ const Chat = () => {
         } else if (receivedMessage.status === "error") {
           console.error("Error from server:", receivedMessage.message);
           toast.error(receivedMessage.message);
+        } else if (receivedMessage.status === "success") {
+          toast.success(receivedMessage.message);
         } else {
           console.log(
             `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
@@ -730,7 +732,6 @@ const Chat = () => {
         creator: localStorage.getItem("username"),
       })
     );
-    toast.success(`Channel #${channelName} created successfully!`);
   };
 
   const handleCommand = (command) => {
