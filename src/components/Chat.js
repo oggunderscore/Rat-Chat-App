@@ -4,6 +4,7 @@ import EmojiPicker from "../components/EmojiPicker";
 import AttachFileButton from "../components/AttachFileButton";
 import Tooltip from "@mui/material/Tooltip";
 import CryptoJS from "crypto-js";
+import sha256 from "crypto-js/sha256"; // Import SHA-256 for checksum calculation
 import { ToastContainer, toast } from "react-toastify"; // Add toast notifications
 import "react-toastify/dist/ReactToastify.css";
 import { db, auth } from "../firebase";
@@ -16,6 +17,8 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import Modal from "@mui/material/Modal";
+import CircularProgress from "@mui/material/CircularProgress";
 
 const encryptMessage = (message, key) => {
   return CryptoJS.AES.encrypt(message, key).toString();
@@ -56,6 +59,7 @@ const Chat = () => {
   const receivedMessagesRef = useRef(0);
 
   const [isInitializationPending, setIsInitializationPending] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
 
   useEffect(() => {
     // Set up auth state listener
@@ -71,24 +75,41 @@ const Chat = () => {
   }, []);
 
   const handleFileDownload = useCallback(
-    (base64Data, filename) => {
-      if (!globalEncryptionKey) return;
-      const decryptedFileData = decryptMessage(base64Data, globalEncryptionKey);
+    (fileData, filename, expectedChecksum) => {
+      try {
+        // Decode the Base64-encoded file data
+        const binaryData = Uint8Array.from(atob(fileData), (c) =>
+          c.charCodeAt(0)
+        );
 
-      const blob = new Blob(
-        [Uint8Array.from(atob(decryptedFileData), (c) => c.charCodeAt(0))],
-        {
-          type: "application/octet-stream",
+        // Calculate checksum of the downloaded file
+        const checksum = sha256(
+          CryptoJS.lib.WordArray.create(binaryData)
+        ).toString();
+
+        console.log(`[Debug] Downloaded File Checksum: ${checksum}`);
+        console.log(`[Debug] Expected File Checksum: ${expectedChecksum}`);
+
+        if (checksum !== expectedChecksum) {
+          throw new Error("Checksum mismatch. File may be corrupted.");
         }
-      );
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      console.log("Opening save dialog for file:", filename);
-      link.click();
-      URL.revokeObjectURL(link.href);
+
+        // Create a Blob and trigger the download
+        const blob = new Blob([binaryData], {
+          type: "application/octet-stream",
+        });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        console.log("Opening save dialog for file:", filename);
+        link.click();
+        URL.revokeObjectURL(link.href);
+      } catch (error) {
+        console.error("Error downloading file:", error);
+        toast.error("Failed to download file. Checksum validation error.");
+      }
     },
-    [globalEncryptionKey]
+    []
   );
 
   const fetchUserKey = useCallback(
@@ -246,26 +267,29 @@ const Chat = () => {
         const parsedMessage = JSON.parse(msg);
         if (parsedMessage.message && parsedMessage.sender) {
           try {
-            if (userKeys[parsedMessage.sender]) {
+            const senderKey = userKeys[parsedMessage.sender];
+            console.log("ParsedMessage:", parsedMessage);
+            // Decrypt only if the message is marked as encrypted
+            if (parsedMessage.isEncrypted && senderKey) {
               parsedMessage.message = decryptMessage(
                 parsedMessage.message,
-                userKeys[parsedMessage.sender]
+                senderKey
               );
               console.log(
                 `[Debug] Successfully decrypted message from ${parsedMessage.sender}: ${parsedMessage.message}`
               );
             } else {
               console.log(
-                `[Debug] Missing key for ${parsedMessage.sender}, marking as encrypted`
+                `[Debug] Skipping decryption for plaintext message from ${parsedMessage.sender}: ${parsedMessage.message}`
               );
-              // parsedMessage.message = "[Encrypted Message]";
             }
           } catch (error) {
             console.error(
               `[Debug] Decryption error for ${parsedMessage.sender}:`,
               error
             );
-            // parsedMessage.message = "[Encrypted Message]";
+            // Optionally, mark the message as "[Encrypted Message]" if decryption fails
+            parsedMessage.message = "[Encrypted Message]";
           }
         }
         return parsedMessage;
@@ -283,12 +307,9 @@ const Chat = () => {
 
       try {
         const senderKey = userKeys[receivedMessage.sender];
-        if (!senderKey) {
-          console.error(
-            `[Debug] Missing key for ${receivedMessage.sender}, cannot decrypt`
-          );
-          // receivedMessage.message = "[Encrypted Message]";
-        } else {
+
+        // Decrypt only if the message is marked as encrypted
+        if (receivedMessage.isEncrypted && senderKey) {
           receivedMessage.message = decryptMessage(
             receivedMessage.message,
             senderKey
@@ -296,11 +317,17 @@ const Chat = () => {
           console.log(
             `[Debug] Decrypted message from ${receivedMessage.sender}: ${receivedMessage.message}`
           );
+        } else {
+          console.log(
+            `[Debug] Skipping decryption for plaintext message from ${receivedMessage.sender}: ${receivedMessage.message}`
+          );
         }
+
         setMessages((prev) => [...prev, receivedMessage]);
       } catch (error) {
         console.error("[Debug] Decryption error:", error);
-        // receivedMessage.message = "[Encrypted Message]";
+        // Optionally, mark the message as "[Encrypted Message]" if decryption fails
+        receivedMessage.message = "[Encrypted Message]";
         setMessages((prev) => [...prev, receivedMessage]);
       }
     },
@@ -355,10 +382,10 @@ const Chat = () => {
 
     console.log("Connecting to WebSocket server...");
 
-    // socketRef.current = new WebSocket("ws://localhost:8765");
-    socketRef.current = new WebSocket(
-      "wss://rat-chat-server-production.up.railway.app"
-    );
+    socketRef.current = new WebSocket("ws://localhost:8765");
+    // socketRef.current = new WebSocket(
+    //   "wss://rat-chat-server-production.up.railway.app"
+    // );
 
     socketRef.current.onopen = () => {
       console.log("[Debug] WebSocket connection established");
@@ -461,10 +488,26 @@ const Chat = () => {
         const receivedMessage = JSON.parse(event.data);
         console.log("Received message:", receivedMessage);
 
+        if (receivedMessage.type === "file_download") {
+          console.log("Downloading file");
+          handleFileDownload(
+            receivedMessage.file_data,
+            receivedMessage.filename,
+            receivedMessage.checksum // Pass checksum for validation
+          );
+        }
+
         if (receivedMessage.type === "chatroom_history") {
           await fetchAndDecryptHistory(receivedMessage.history);
         } else if (receivedMessage.type === "online_users") {
           setOnlineUsers(receivedMessage.users); // Revert functionality
+        } else if (receivedMessage.type === "pong") {
+          console.log("Heartbeat received");
+          if (pingTimeoutRef.current) {
+            clearTimeout(pingTimeoutRef.current);
+            pingTimeoutRef.current = null;
+          }
+          return;
         } else if (receivedMessage.type === "typing_status") {
           setTypingUsers((prev) => {
             const newSet = new Set(prev);
@@ -477,17 +520,12 @@ const Chat = () => {
           }); // Revert functionality
         } else if (receivedMessage.chatroom === currentChatRef.current) {
           handleIncomingMessage(receivedMessage);
+        } else if (receivedMessage.status === "error") {
+          console.error("Error from server:", receivedMessage.message);
+          toast.error(receivedMessage.message);
         } else {
           console.log(
             `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
-          );
-        }
-
-        if (receivedMessage.type === "file_download") {
-          console.log("Downloading file");
-          handleFileDownload(
-            receivedMessage.file_data,
-            receivedMessage.filename
           );
         }
 
@@ -641,6 +679,7 @@ const Chat = () => {
       message: encryptedMessage,
       timestamp,
       chatroom: currentChat, // Include the current chatroom in the payload
+      isEncrypted: true,
     };
     console.log("Sending encrypted message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
@@ -655,80 +694,85 @@ const Chat = () => {
   };
 
   const handleFileUpload = (file) => {
-    if (!isConnected || !globalEncryptionKey) return;
+    if (!isConnected) return; // Remove encryption dependency
 
     const reader = new FileReader();
-    let offset = 0;
+    // const username = localStorage.getItem("username");
     const fileId = Math.random().toString(36).substring(7);
-    const username = localStorage.getItem("username");
-
-    const sendChunk = (chunk, isLastChunk) => {
-      const encryptedChunk = encryptMessage(chunk, globalEncryptionKey);
-      const uploadMessage = encryptMessage(
-        `${username} uploaded ${file.name}`,
-        globalEncryptionKey
-      );
-
-      const metadata = JSON.stringify({
-        type: "upload_file_chunk",
-        fileId: fileId,
-        fileName: file.name,
-        chunk: encryptedChunk,
-        offset: offset,
-        isLastChunk: isLastChunk,
-        totalSize: file.size,
-        chatroom: currentChat,
-        uploadMessage: uploadMessage,
-        timestamp: new Date().toISOString(),
-      });
-
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        try {
-          socketRef.current.send(metadata);
-          console.log(`[Upload] Sent chunk ${offset}/${file.size}`);
-        } catch (error) {
-          console.error("Error sending chunk:", error);
-          toast.error("File upload failed. Please try again.");
-        }
-      } else {
-        toast.error("Connection lost during upload. Please try again.");
-      }
-    };
 
     reader.onload = (e) => {
-      const fileData = e.target.result.split(",")[1];
-      const fileDataArray = new Uint8Array(
-        atob(fileData)
-          .split("")
-          .map((c) => c.charCodeAt(0))
-      );
-      const totalChunks = Math.ceil(fileDataArray.length / MAX_CHUNK_SIZE);
+      const fileDataArray = new Uint8Array(e.target.result); // Read file as binary data
+      console.log("[Debug] Raw File Data (Uint8Array):", fileDataArray);
 
+      // Calculate checksum without encryption
+      const checksum = sha256(
+        CryptoJS.lib.WordArray.create(fileDataArray)
+      ).toString();
+      console.log(`[Debug] File Checksum (before upload): ${checksum}`);
+
+      const totalChunks = Math.ceil(fileDataArray.length / MAX_CHUNK_SIZE);
       console.log(
         `[Upload] Starting file upload of ${file.name} in ${totalChunks} chunks`
       );
+
+      setUploadProgress(0); // Initialize progress
 
       for (let i = 0; i < totalChunks; i++) {
         const chunk = fileDataArray.slice(
           i * MAX_CHUNK_SIZE,
           (i + 1) * MAX_CHUNK_SIZE
         );
-        const base64Chunk = btoa(String.fromCharCode.apply(null, chunk));
-        offset = i * MAX_CHUNK_SIZE;
+        const offset = i * MAX_CHUNK_SIZE;
         const isLastChunk = i === totalChunks - 1;
 
-        // Add delay between chunks to prevent connection issues
         setTimeout(() => {
-          sendChunk(base64Chunk, isLastChunk);
+          sendChunk(chunk, offset, isLastChunk, checksum);
+          if (isLastChunk) setUploadProgress(null); // Reset progress on completion
         }, i * 100);
+      }
+    };
+
+    const sendChunk = (chunk, offset, isLastChunk, checksum) => {
+      try {
+        // Send raw chunk without encryption
+        console.log(`[Debug] Raw Chunk at offset ${offset}:`, chunk);
+
+        const metadata = JSON.stringify({
+          type: "upload_file_chunk",
+          fileId: fileId,
+          fileName: file.name,
+          chunk: Array.from(chunk), // Convert Uint8Array to Array for JSON serialization
+          offset: offset,
+          isLastChunk: isLastChunk,
+          totalSize: file.size,
+          checksum: checksum, // Include file checksum
+          chatroom: currentChat,
+          timestamp: new Date().toISOString(),
+        });
+
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+          socketRef.current.send(metadata);
+          console.log(`[Upload] Sent chunk at offset ${offset}`);
+          setUploadProgress(
+            Math.min(((offset + chunk.length) / file.size) * 100, 100)
+          ); // Update progress
+        } else {
+          toast.error("Connection lost during upload. Please try again.");
+          setUploadProgress(null); // Reset progress on error
+        }
+      } catch (error) {
+        console.error("Error sending chunk:", error);
+        toast.error("File upload failed. Please try again.");
+        setUploadProgress(null); // Reset progress on error
       }
     };
 
     reader.onerror = () => {
       toast.error("Error reading file. Please try again.");
+      setUploadProgress(null); // Reset progress on error
     };
 
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file); // Read file as binary data
   };
 
   const requestFileDownload = (filename) => {
@@ -932,6 +976,22 @@ const Chat = () => {
           </Tooltip>
         </div>
       </div>
+      <Modal open={uploadProgress !== null}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100vh",
+          }}
+        >
+          <CircularProgress />
+          <p style={{ marginTop: "10px" }}>
+            Uploading... {Math.round(uploadProgress)}%
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 };
