@@ -2,8 +2,14 @@ import React, { useEffect, useState } from "react";
 import "./Chat.css";
 import "./Sidebar.css";
 import LogoutButton from "./LogoutButton";
+import AddIcon from "@mui/icons-material/Add"; // Import Material UI Add icon
 
-const Sidebar = ({ setCurrentChat, onlineUsers, chatrooms }) => {
+const Sidebar = ({
+  setCurrentChat,
+  onlineUsers,
+  chatrooms,
+  createNewChannel,
+}) => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
@@ -38,7 +44,17 @@ const Sidebar = ({ setCurrentChat, onlineUsers, chatrooms }) => {
   return (
     <div className="sidebar">
       <h2>Welcome, {user}</h2>
-      <h2>Chatrooms</h2>
+      <div className="chatrooms-header">
+        <h2>Chatrooms</h2>
+        <AddIcon
+          className="add-channel-icon"
+          onClick={() => {
+            const channelName = prompt("Enter new channel name:");
+            if (channelName) createNewChannel(channelName);
+          }}
+          style={{ cursor: "pointer" }}
+        />
+      </div>
       {chatrooms
         .filter((room) => canJoinChannel(room)) // Only show channels the user can join
         .map((room) => (

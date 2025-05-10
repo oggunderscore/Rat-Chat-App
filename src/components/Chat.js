@@ -1000,6 +1000,7 @@ const Chat = () => {
         onlineUsers={onlineUsers}
         setCurrentChat={handleChatChange}
         chatrooms={chatrooms}
+        createNewChannel={createNewChannel} // Pass the createNewChannel function
       />
       <div className="chat-container">
         <div className="chat-header">
@@ -1007,14 +1008,6 @@ const Chat = () => {
           {!isConnected && retryCountRef.current >= 5 && (
             <button onClick={handleReconnect}>Reconnect</button>
           )}
-          <button
-            onClick={() => {
-              const channelName = prompt("Enter new channel name:");
-              if (channelName) createNewChannel(channelName);
-            }}
-          >
-            Create Channel
-          </button>
         </div>
         <div className="chat-messages">
           {messages
