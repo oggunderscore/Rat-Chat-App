@@ -175,6 +175,7 @@ const Chat = () => {
                       msg.message,
                       newKeys[msg.sender]
                     );
+                    msg.isEncrypted = false; // Mark as decrypted
                     console.log(
                       `[KeyFetch] Successfully decrypted message from ${msg.sender}: ${msg.message}`
                     );
@@ -296,6 +297,7 @@ const Chat = () => {
                 parsedMessage.message,
                 senderKey
               );
+              parsedMessage.isEncrypted = false; // Mark as decrypted
               console.log(
                 `[Debug] Successfully decrypted message from ${parsedMessage.sender}: ${parsedMessage.message}`
               );
@@ -347,6 +349,7 @@ const Chat = () => {
             receivedMessage.message,
             senderKey
           );
+          receivedMessage.isEncrypted = false; // Mark as decrypted
           console.log(
             `[Debug] Decrypted message from ${receivedMessage.sender}: ${receivedMessage.message}`
           );
