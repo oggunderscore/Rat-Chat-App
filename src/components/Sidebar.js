@@ -46,14 +46,6 @@ const Sidebar = ({
       <h2>Welcome, {user}</h2>
       <div className="chatrooms-header">
         <h2>Chatrooms</h2>
-        <AddIcon
-          className="add-channel-icon"
-          onClick={() => {
-            const channelName = prompt("Enter new channel name:");
-            if (channelName) createNewChannel(channelName);
-          }}
-          style={{ cursor: "pointer" }}
-        />
       </div>
       {chatrooms
         .filter((room) => canJoinChannel(room)) // Only show channels the user can join
@@ -62,6 +54,14 @@ const Sidebar = ({
             <div onClick={() => setCurrentChat(room.name)}># {room.name}</div>
           </div>
         ))}
+      <AddIcon
+        className="add-channel-icon"
+        onClick={() => {
+          const channelName = prompt("Enter new channel name:");
+          if (channelName) createNewChannel(channelName);
+        }}
+        style={{ cursor: "pointer" }}
+      />
       <h3>Direct Messages</h3>
       {filteredUsers.map((username) => (
         <div
