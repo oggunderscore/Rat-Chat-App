@@ -382,10 +382,10 @@ const Chat = () => {
 
     console.log("Connecting to WebSocket server...");
 
-    socketRef.current = new WebSocket("ws://localhost:8765");
-    // socketRef.current = new WebSocket(
-    //   "wss://rat-chat-server-production.up.railway.app"
-    // );
+    // socketRef.current = new WebSocket("ws://localhost:8765");
+    socketRef.current = new WebSocket(
+      "wss://rat-chat-server-production.up.railway.app"
+    );
 
     socketRef.current.onopen = () => {
       console.log("[Debug] WebSocket connection established");

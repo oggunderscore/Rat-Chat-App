@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  query,
+  collection,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -38,9 +47,22 @@ const Auth = () => {
       return;
     }
     setLoading(true);
-    const hashedPassword = hashPassword(password);
-    const encryptionKey = generateEncryptionKey(password); // Generate encryption key
+
     try {
+      // Check if username already exists
+      const usernameQuery = query(
+        collection(db, "users"),
+        where("username", "==", username)
+      );
+      const usernameSnapshot = await getDocs(usernameQuery);
+      if (!usernameSnapshot.empty) {
+        toast.error("Username is already taken");
+        setLoading(false);
+        return;
+      }
+
+      const hashedPassword = hashPassword(password);
+      const encryptionKey = generateEncryptionKey(password); // Generate encryption key
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
