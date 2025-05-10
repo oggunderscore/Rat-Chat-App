@@ -166,23 +166,29 @@ const Chat = () => {
           setMessages((messages) =>
             messages.map((msg) => {
               if (msg.sender && newKeys[msg.sender] && msg.message) {
-                console.log(
-                  `[KeyFetch] Attempting to decrypt message from ${msg.sender} | ${msg.message}`
-                );
-                try {
-                  msg.message = decryptMessage(
-                    msg.message,
-                    newKeys[msg.sender]
-                  );
+                if (msg.isEncrypted) {
                   console.log(
-                    `[KeyFetch] Successfully decrypted message from ${msg.sender}: ${msg.message}`
+                    `[KeyFetch] Attempting to decrypt message from ${msg.sender} | ${msg.message}`
                   );
-                } catch (error) {
-                  console.error(
-                    `[KeyFetch] Failed to decrypt message from ${msg.sender}:`,
-                    error
+                  try {
+                    msg.message = decryptMessage(
+                      msg.message,
+                      newKeys[msg.sender]
+                    );
+                    console.log(
+                      `[KeyFetch] Successfully decrypted message from ${msg.sender}: ${msg.message}`
+                    );
+                  } catch (error) {
+                    console.error(
+                      `[KeyFetch] Failed to decrypt message from ${msg.sender}:`,
+                      error
+                    );
+                    // msg.message = "[Encrypted Message]";
+                  }
+                } else {
+                  console.log(
+                    `[KeyFetch] Skipping decryption for plaintext message from ${msg.sender}: ${msg.message}`
                   );
-                  // msg.message = "[Encrypted Message]";
                 }
               }
               return msg;
