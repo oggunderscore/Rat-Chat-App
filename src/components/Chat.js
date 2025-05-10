@@ -1022,7 +1022,7 @@ const Chat = () => {
         <div className="chat-messages">
           {messages
             // .filter((msg) => msg.chatroom === currentChat) // Filter messages by current chatroom
-            .filter((msg) => msg.message && msg.timestamp) // Filter out invalid messages
+            .filter((msg) => msg.message && msg.timestamp && !msg.isEncrypted) // Filter out invalid or encrypted messages
             .map((msg, index) => (
               <div key={index} className="message">
                 <span className="timestamp">
