@@ -60,6 +60,7 @@ const Chat = () => {
 
   const [isInitializationPending, setIsInitializationPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
+  const [chatrooms, setChatrooms] = useState([]); // Track available chatrooms with user permissions
 
   useEffect(() => {
     // Set up auth state listener
@@ -220,7 +221,7 @@ const Chat = () => {
         connectWebSocket();
       }, 5000);
 
-      // Send ping with username
+      // Send ping with username and fetch online users and channels
       try {
         socketRef.current.send(
           JSON.stringify({
@@ -229,6 +230,20 @@ const Chat = () => {
           })
         );
         console.log(`Ping sent for user ${username}`);
+
+        // Fetch online users
+        socketRef.current.send(
+          JSON.stringify({
+            type: "get_online_users",
+          })
+        );
+
+        // Fetch available channels
+        socketRef.current.send(
+          JSON.stringify({
+            type: "get_channels",
+          })
+        );
       } catch (error) {
         console.error("Error sending ping:", error);
         clearTimeout(pingTimeoutRef.current);
@@ -302,11 +317,23 @@ const Chat = () => {
   );
 
   const handleIncomingMessage = useCallback(
-    (receivedMessage) => {
+    async (receivedMessage) => {
       if (!receivedMessage.sender || !receivedMessage.message) return;
 
       try {
-        const senderKey = userKeys[receivedMessage.sender];
+        let senderKey = userKeys[receivedMessage.sender];
+
+        // Fetch the sender's key if it is undefined
+        if (!senderKey) {
+          console.log(
+            `[Debug] Fetching key for sender: ${receivedMessage.sender}`
+          );
+          await fetchUserKey(receivedMessage.sender);
+          senderKey = userKeys[receivedMessage.sender]; // Recheck after fetching
+        }
+
+        console.log("isEncrypted:", receivedMessage.isEncrypted);
+        console.log("SenderKey:", senderKey);
 
         // Decrypt only if the message is marked as encrypted
         if (receivedMessage.isEncrypted && senderKey) {
@@ -331,7 +358,7 @@ const Chat = () => {
         setMessages((prev) => [...prev, receivedMessage]);
       }
     },
-    [userKeys]
+    [userKeys, fetchUserKey]
   );
 
   useEffect(() => {
@@ -350,6 +377,16 @@ const Chat = () => {
       heartbeatFunctionRef.current?.();
     }, 30000); // Hearbeat every 30 seconds
   }, []);
+
+  const fetchChatrooms = useCallback(() => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "get_channels" }));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchChatrooms(); // Fetch chatrooms on component mount
+  }, [fetchChatrooms]);
 
   const connectWebSocket = useCallback(() => {
     console.log("[Debug] connectWebSocket called with deps:", {
@@ -382,10 +419,10 @@ const Chat = () => {
 
     console.log("Connecting to WebSocket server...");
 
-    // socketRef.current = new WebSocket("ws://localhost:8765");
-    socketRef.current = new WebSocket(
-      "wss://rat-chat-server-production.up.railway.app"
-    );
+    socketRef.current = new WebSocket("ws://localhost:8765");
+    // socketRef.current = new WebSocket(
+    //   "wss://rat-chat-server-production.up.railway.app"
+    // );
 
     socketRef.current.onopen = () => {
       console.log("[Debug] WebSocket connection established");
@@ -428,6 +465,12 @@ const Chat = () => {
         JSON.stringify({
           type: "get_online_users",
           username: localStorage.getItem("username"),
+        })
+      );
+      // Fetch available channels
+      socketRef.current.send(
+        JSON.stringify({
+          type: "get_channels",
         })
       );
       toast.success("Connected to Websocket server!");
@@ -518,6 +561,13 @@ const Chat = () => {
             }
             return newSet;
           }); // Revert functionality
+        } else if (receivedMessage.type === "channel_list") {
+          // Ensure users property is always defined
+          const updatedChannels = receivedMessage.channels.map((channel) => ({
+            ...channel,
+            users: channel.users || [], // Default to an empty array if users is undefined
+          }));
+          setChatrooms(updatedChannels); // Update chatrooms list with user permissions
         } else if (receivedMessage.chatroom === currentChatRef.current) {
           handleIncomingMessage(receivedMessage);
         } else if (receivedMessage.status === "error") {
@@ -661,7 +711,54 @@ const Chat = () => {
     isInitializationPending,
   ]);
 
+  const createNewChannel = (channelName) => {
+    if (!channelName.trim() || !socketRef.current || !isConnected) return;
+
+    socketRef.current.send(
+      JSON.stringify({
+        type: "create_channel",
+        channelName: channelName.trim(),
+        creator: localStorage.getItem("username"),
+      })
+    );
+    toast.success(`Channel #${channelName} created successfully!`);
+  };
+
+  const handleCommand = (command) => {
+    const [action, username] = command.split(" ");
+    if (!username || !socketRef.current || !isConnected) return;
+
+    if (action === "/add") {
+      socketRef.current.send(
+        JSON.stringify({
+          type: "add_user_to_channel",
+          username,
+          chatroom: currentChat,
+        })
+      );
+      toast.success(`${username} added to #${currentChat}`);
+    } else if (action === "/remove") {
+      socketRef.current.send(
+        JSON.stringify({
+          type: "remove_user_from_channel",
+          username,
+          chatroom: currentChat,
+        })
+      );
+      toast.success(`${username} removed from #${currentChat}`);
+    } else {
+      toast.error(
+        "Invalid command. Use /add <username> or /remove <username>."
+      );
+    }
+  };
+
   const sendMessage = () => {
+    if (message.trim().startsWith("/")) {
+      handleCommand(message.trim());
+      setMessage("");
+      return;
+    }
     if (
       message.trim() === "" ||
       !socketRef.current ||
@@ -902,7 +999,7 @@ const Chat = () => {
       <Sidebar
         onlineUsers={onlineUsers}
         setCurrentChat={handleChatChange}
-        chatrooms={["general"]}
+        chatrooms={chatrooms}
       />
       <div className="chat-container">
         <div className="chat-header">
@@ -910,6 +1007,14 @@ const Chat = () => {
           {!isConnected && retryCountRef.current >= 5 && (
             <button onClick={handleReconnect}>Reconnect</button>
           )}
+          <button
+            onClick={() => {
+              const channelName = prompt("Enter new channel name:");
+              if (channelName) createNewChannel(channelName);
+            }}
+          >
+            Create Channel
+          </button>
         </div>
         <div className="chat-messages">
           {messages

@@ -25,19 +25,27 @@ const Sidebar = ({ setCurrentChat, onlineUsers, chatrooms }) => {
     setCurrentChat(dmChannel);
   };
 
+  const canJoinChannel = (channel) => {
+    if (channel.name === "general") {
+      return true; // Everyone can join the general channel
+    } else if (channel.users.includes(user)) {
+      return true; // User is already a member of the channel
+    } else {
+      return false;
+    }
+  };
+
   return (
     <div className="sidebar">
       <h2>Welcome, {user}</h2>
       <h2>Chatrooms</h2>
-      {chatrooms.map((room) => (
-        <div
-          key={room}
-          className="channel"
-          onClick={() => setCurrentChat(room)}
-        >
-          # {room}
-        </div>
-      ))}
+      {chatrooms
+        .filter((room) => canJoinChannel(room)) // Only show channels the user can join
+        .map((room) => (
+          <div key={room.name} className="channel">
+            <div onClick={() => setCurrentChat(room.name)}># {room.name}</div>
+          </div>
+        ))}
       <h3>Direct Messages</h3>
       {filteredUsers.map((username) => (
         <div
