@@ -2,6 +2,12 @@
 
 RatChat is a WebSocket-based real-time messaging application designed for secure and efficient communication. It supports features such as encrypted messaging, file sharing, and multiple chatrooms.
 
+## Production Link
+https://rat-chat.netlify.app/ 
+
+## Uptime Status
+https://uptime-kuma-production-4845.up.railway.app/status/rat-chat 
+
 ## Features
 
 - **Real-Time Messaging**: Communicate instantly with other users using WebSocket technology.
