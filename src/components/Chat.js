@@ -19,6 +19,7 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import Modal from "@mui/material/Modal";
 import CircularProgress from "@mui/material/CircularProgress";
+import forge from "node-forge";
 
 const encryptMessage = (message, key) => {
   return CryptoJS.AES.encrypt(message, key).toString();
@@ -61,6 +62,54 @@ const Chat = () => {
   const [isInitializationPending, setIsInitializationPending] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null); // Track upload progress
   const [chatrooms, setChatrooms] = useState([]); // Track available chatrooms with user permissions
+
+  const [signatureScheme, setSignatureScheme] = useState("RSA"); // Default to RSA
+  const [privateKey, setPrivateKey] = useState(null);
+  const [publicKey, setPublicKey] = useState(null);
+
+  useEffect(() => {
+    // Generate key pair for the selected signature scheme
+    if (signatureScheme === "RSA") {
+      const keypair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+      setPrivateKey(keypair.privateKey);
+      setPublicKey(keypair.publicKey);
+      console.log("[Debug] Generated RSA key pair.");
+    } else if (signatureScheme === "DSA") {
+      const keypair = forge.pki.dsa.generateKeyPair({ bits: 2048 });
+      setPrivateKey(keypair.privateKey);
+      setPublicKey(keypair.publicKey);
+      console.log("[Debug] Generated DSA key pair.");
+    }
+  }, [signatureScheme]);
+
+  const computeHash = (message) => {
+    const md = forge.md.sha256.create();
+    md.update(message, "utf8");
+    const hash = md.digest().toHex();
+    console.log(`[Debug] Computed hash for message: ${hash}`);
+    return hash;
+  };
+
+  const signMessage = (hash) => {
+    const md = forge.md.sha256.create();
+    md.update(hash, "utf8");
+    const signature = privateKey.sign(md);
+    const signatureBase64 = forge.util.encode64(signature);
+    console.log(`[Debug] Signed hash: ${signatureBase64}`);
+    return signatureBase64;
+  };
+
+  const verifyMessage = useCallback(
+    (hash, signature) => {
+      const md = forge.md.sha256.create();
+      md.update(hash, "utf8");
+      const signatureBytes = forge.util.decode64(signature);
+      const isValid = publicKey.verify(md.digest().bytes(), signatureBytes);
+      console.log(`[Debug] Signature verification result: ${isValid}`);
+      return isValid;
+    },
+    [publicKey]
+  );
 
   useEffect(() => {
     // Set up auth state listener
@@ -340,19 +389,33 @@ const Chat = () => {
           senderKey = userKeys[receivedMessage.sender]; // Recheck after fetching
         }
 
-        console.log("isEncrypted:", receivedMessage.isEncrypted);
-        console.log("SenderKey:", senderKey);
+        console.log("[Debug] Received message:", receivedMessage);
 
-        // Decrypt only if the message is marked as encrypted
+        // Decrypt the message
         if (receivedMessage.isEncrypted && senderKey) {
-          receivedMessage.message = decryptMessage(
+          const decryptedMessage = decryptMessage(
             receivedMessage.message,
             senderKey
           );
-          receivedMessage.isEncrypted = false; // Mark as decrypted
+          const computedHash = computeHash(decryptedMessage);
+
+          console.log("[Debug] Computed raw hash:", computedHash);
+
+          // Verify the hash
+          const isHashValid = verifyMessage(computedHash, receivedMessage.hash);
+          if (!isHashValid) {
+            console.error(
+              "[Debug] Hash verification failed. Message integrity compromised."
+            );
+            toast.error("Message integrity verification failed.");
+            return;
+          }
+
           console.log(
-            `[Debug] Decrypted message from ${receivedMessage.sender}: ${receivedMessage.message}`
+            `[Debug] Decrypted message from ${receivedMessage.sender}: ${decryptedMessage}`
           );
+          receivedMessage.message = decryptedMessage;
+          receivedMessage.isEncrypted = false; // Mark as decrypted
         } else {
           console.log(
             `[Debug] Skipping decryption for plaintext message from ${receivedMessage.sender}: ${receivedMessage.message}`
@@ -361,13 +424,12 @@ const Chat = () => {
 
         setMessages((prev) => [...prev, receivedMessage]);
       } catch (error) {
-        console.error("[Debug] Decryption error:", error);
-        // Optionally, mark the message as "[Encrypted Message]" if decryption fails
+        console.error("[Debug] Error processing incoming message:", error);
         receivedMessage.message = "[Encrypted Message]";
         setMessages((prev) => [...prev, receivedMessage]);
       }
     },
-    [userKeys, fetchUserKey]
+    [userKeys, fetchUserKey, verifyMessage]
   );
 
   useEffect(() => {
@@ -428,10 +490,10 @@ const Chat = () => {
 
     console.log("Connecting to WebSocket server...");
 
-    // socketRef.current = new WebSocket("ws://localhost:8765");
-    socketRef.current = new WebSocket(
-      "wss://rat-chat-server-production.up.railway.app"
-    );
+    socketRef.current = new WebSocket("ws://localhost:8765");
+    // socketRef.current = new WebSocket(
+    //   "wss://rat-chat-server-production.up.railway.app"
+    // );
 
     socketRef.current.onopen = () => {
       console.log("[Debug] WebSocket connection established");
@@ -782,13 +844,18 @@ const Chat = () => {
       message.trim(),
       globalEncryptionKey
     );
+    const hash = computeHash(message.trim());
+    const signature = signMessage(hash);
+
     const messageData = {
       message: encryptedMessage,
       timestamp,
       chatroom: currentChat, // Include the current chatroom in the payload
       isEncrypted: true,
+      hash: signature, // Send the signed hash
     };
-    console.log("Sending encrypted message:", messageData);
+
+    console.log("[Debug] Sending message:", messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
   };
@@ -1015,6 +1082,17 @@ const Chat = () => {
       <div className="chat-container">
         <div className="chat-header">
           <h2>{getChatHeader()}</h2>
+          <div>
+            <label htmlFor="signatureScheme">Signature Scheme:</label>
+            <select
+              id="signatureScheme"
+              value={signatureScheme}
+              onChange={(e) => setSignatureScheme(e.target.value)}
+            >
+              <option value="RSA">RSA</option>
+              <option value="DSA">DSA</option>
+            </select>
+          </div>
           {!isConnected && retryCountRef.current >= 5 && (
             <button onClick={handleReconnect}>Reconnect</button>
           )}
