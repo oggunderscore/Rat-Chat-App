@@ -82,6 +82,8 @@ const Chat = () => {
     }
   }, [signatureScheme]);
 
+  // Note: Helper functions for signing and verifying messages
+
   const computeHash = (message) => {
     const md = forge.md.sha256.create();
     md.update(message, "utf8");
@@ -162,6 +164,7 @@ const Chat = () => {
     []
   );
 
+  // Function to fetch user keys
   const fetchUserKey = useCallback(
     async (username) => {
       if (
@@ -308,6 +311,7 @@ const Chat = () => {
     };
   });
 
+  // Function to fetch and decrypt message history
   const fetchAndDecryptHistory = useCallback(
     async (history) => {
       console.log(`[History] Processing ${history.length} messages`);
@@ -373,6 +377,7 @@ const Chat = () => {
     [userKeys, fetchUserKey]
   );
 
+  // Function to handle incoming messages
   const handleIncomingMessage = useCallback(
     async (receivedMessage) => {
       if (!receivedMessage.sender || !receivedMessage.message) return;
