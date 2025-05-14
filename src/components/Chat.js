@@ -1090,7 +1090,7 @@ const Chat = () => {
               onChange={(e) => setSignatureScheme(e.target.value)}
             >
               <option value="RSA">RSA</option>
-              <option value="DSA">DSA</option>
+              {/* <option value="DSA">DSA</option> */}
             </select>
           </div>
           {!isConnected && retryCountRef.current >= 5 && (
