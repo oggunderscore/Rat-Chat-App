@@ -74,11 +74,6 @@ const Chat = () => {
       setPrivateKey(keypair.privateKey);
       setPublicKey(keypair.publicKey);
       console.log("[Debug] Generated RSA key pair.");
-    } else if (signatureScheme === "DSA") {
-      const keypair = forge.pki.dsa.generateKeyPair({ bits: 2048 });
-      setPrivateKey(keypair.privateKey);
-      setPublicKey(keypair.publicKey);
-      console.log("[Debug] Generated DSA key pair.");
     }
   }, [signatureScheme]);
 
@@ -526,8 +521,6 @@ const Chat = () => {
         retryTimeoutRef.current = null;
       }
 
-      console.log("User: ", username, "Chatroom: ", currentChatRef.current);
-
       socketRef.current.send(
         JSON.stringify({ username, chatroom: currentChatRef.current }) // Use currentChatRef
       );
@@ -566,25 +559,6 @@ const Chat = () => {
         `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}`
       );
 
-      // Handle specific close scenarios
-      const closeMessages = {
-        1000: "Normal closure",
-        1001: "Server is going down or browser navigated away",
-        1002: "Protocol error",
-        1003: "Invalid data received",
-        1005: "No status code present",
-        1006: "Connection lost abnormally",
-        1007: "Invalid frame payload data",
-        1008: "Policy violation",
-        1009: "Message too big",
-        1010: "Extension negotiation failed",
-        1011: "Server error",
-        1015: "TLS handshake failed",
-      };
-
-      const closeMessage = closeMessages[event.code] || "Unknown reason";
-      console.log(`Close reason: ${closeMessage}`);
-
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
       }
@@ -605,7 +579,7 @@ const Chat = () => {
     socketRef.current.onmessage = async (event) => {
       if (typeof event.data === "string") {
         const receivedMessage = JSON.parse(event.data);
-        console.log("Received message:", receivedMessage);
+        // console.log("Received message:", receivedMessage);
 
         if (receivedMessage.type === "file_download") {
           console.log("Downloading file");
@@ -651,11 +625,12 @@ const Chat = () => {
           toast.error(receivedMessage.message);
         } else if (receivedMessage.status === "success") {
           toast.success(receivedMessage.message);
-        } else {
-          console.log(
-            `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
-          );
         }
+        // else {
+        //   console.log(
+        //     `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
+        //   );
+        // }
 
         if (receivedMessage.type === "file_upload_status") {
           if (receivedMessage.status === "success") {
