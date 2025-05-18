@@ -2,6 +2,14 @@
 
 RatChat is a WebSocket-based real-time messaging application designed for secure and efficient communication. It supports features such as encrypted messaging, file sharing, and multiple chatrooms.
 
+## Contributing Group Members
+- Kevin Nguyen - Front-end site development
+- Matt De Binion - Back-end Websocket Server, Railway Setup
+- Nathan Warner - Project Management & Design
+- Harry Derderian - Firebase setup, Uptime monitor sSetup
+- Hyungjoo Yoon - Cryptographic function implementation
+
+
 ## Production Link
 https://rat-chat.netlify.app/ 
 
