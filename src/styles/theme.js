@@ -1,0 +1,47 @@
+// Modern theme configuration
+export const theme = {
+  colors: {
+    primary: '#6366f1',
+    primaryHover: '#5855eb',
+    secondary: '#8b5cf6',
+    accent: '#06b6d4',
+    background: '#0f0f23',
+    surface: '#1a1a2e',
+    surfaceHover: '#16213e',
+    text: '#ffffff',
+    textSecondary: '#a1a1aa',
+    textMuted: '#71717a',
+    border: '#27272a',
+    success: '#10b981',
+    warning: '#f59e0b',
+    error: '#ef4444',
+    online: '#22c55e',
+    offline: '#6b7280',
+  },
+  spacing: {
+    xs: '0.25rem',
+    sm: '0.5rem',
+    md: '1rem',
+    lg: '1.5rem',
+    xl: '2rem',
+    xxl: '3rem',
+  },
+  borderRadius: {
+    sm: '0.375rem',
+    md: '0.5rem',
+    lg: '0.75rem',
+    xl: '1rem',
+    full: '9999px',
+  },
+  shadows: {
+    sm: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    md: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+    lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+    xl: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
+  },
+  transitions: {
+    fast: '0.15s ease-in-out',
+    normal: '0.3s ease-in-out',
+    slow: '0.5s ease-in-out',
+  },
+};

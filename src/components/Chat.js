@@ -550,17 +550,20 @@ const Chat = () => {
         }
 
         if (receivedMessage.type === "chatroom_history") {
+          console.log(`📚 Received history for channel: ${receivedMessage.chatroom || 'unknown'} (${receivedMessage.history?.length || 0} messages)`);
           await fetchAndDecryptHistory(receivedMessage.history);
         } else if (receivedMessage.type === "online_users") {
+          console.log(`👥 Updated online users: ${receivedMessage.users?.length || 0} users`);
           setOnlineUsers(receivedMessage.users); // Revert functionality
         } else if (receivedMessage.type === "pong") {
-          console.log("Heartbeat received");
+          console.log("💓 Heartbeat received");
           if (pingTimeoutRef.current) {
             clearTimeout(pingTimeoutRef.current);
             pingTimeoutRef.current = null;
           }
           return;
         } else if (receivedMessage.type === "typing_status") {
+          console.log(`⌨️ Typing status: ${receivedMessage.username} ${receivedMessage.is_typing ? 'started' : 'stopped'} typing in ${receivedMessage.chatroom}`);
           setTypingUsers((prev) => {
             const newSet = new Set(prev);
             if (receivedMessage.is_typing) {
@@ -571,23 +574,31 @@ const Chat = () => {
             return newSet;
           }); // Revert functionality
         } else if (receivedMessage.type === "channel_list") {
+          console.log(`📋 Updated channel list: ${receivedMessage.channels?.length || 0} channels`);
           // Ensure users property is always defined
           const updatedChannels = receivedMessage.channels.map((channel) => ({
             ...channel,
             users: channel.users || [], // Default to an empty array if users is undefined
           }));
           setChatrooms(updatedChannels); // Update chatrooms list with user permissions
+        } else if (receivedMessage.type === "switch_chatroom_response") {
+          console.log(`✅ Channel switch confirmed: ${receivedMessage.chatroom}`);
+          // Channel switch was successful, history should follow
         } else if (receivedMessage.chatroom === currentChatRef.current) {
+          console.log(`📨 Incoming message for current channel (${currentChatRef.current}): ${receivedMessage.sender}`);
           handleIncomingMessage(receivedMessage);
         } else if (receivedMessage.status === "error") {
-          console.error("Error from server:", receivedMessage.message);
+          console.error("❌ Error from server:", receivedMessage.message);
           toast.error(receivedMessage.message);
         } else if (receivedMessage.status === "success") {
+          console.log("✅ Success from server:", receivedMessage.message);
           toast.success(receivedMessage.message);
-        } else {
+        } else if (receivedMessage.chatroom && receivedMessage.chatroom !== currentChatRef.current) {
           console.log(
-            `Message received for chatroom ${receivedMessage.chatroom}, but currentChat is ${currentChatRef.current}`
+            `📨 Message received for different channel: ${receivedMessage.chatroom} (current: ${currentChatRef.current}) - ignoring`
           );
+        } else {
+          console.log("📨 Received message without chatroom or type:", receivedMessage);
         }
 
         if (receivedMessage.type === "file_upload_status") {
@@ -743,19 +754,19 @@ const Chat = () => {
         JSON.stringify({
           type: "add_user_to_channel",
           username,
-          chatroom: currentChat,
+          chatroom: currentChatRef.current, // Use currentChatRef for consistency
         })
       );
-      toast.success(`${username} added to #${currentChat}`);
+      toast.success(`${username} added to #${currentChatRef.current}`);
     } else if (action === "/remove") {
       socketRef.current.send(
         JSON.stringify({
           type: "remove_user_from_channel",
           username,
-          chatroom: currentChat,
+          chatroom: currentChatRef.current, // Use currentChatRef for consistency
         })
       );
-      toast.success(`${username} removed from #${currentChat}`);
+      toast.success(`${username} removed from #${currentChatRef.current}`);
     } else {
       toast.error(
         "Invalid command. Use /add <username> or /remove <username>."
@@ -785,10 +796,10 @@ const Chat = () => {
     const messageData = {
       message: encryptedMessage,
       timestamp,
-      chatroom: currentChat, // Include the current chatroom in the payload
+      chatroom: currentChatRef.current, // Use currentChatRef to ensure correct channel
       isEncrypted: true,
     };
-    console.log("Sending encrypted message:", messageData);
+    console.log(`📤 Sending encrypted message to channel: ${currentChatRef.current}`, messageData);
     socketRef.current.send(JSON.stringify(messageData));
     setMessage("");
   };
@@ -853,7 +864,7 @@ const Chat = () => {
           isLastChunk: isLastChunk,
           totalSize: file.size,
           checksum: checksum, // Include file checksum
-          chatroom: currentChat,
+          chatroom: currentChatRef.current, // Use currentChatRef for consistency
           timestamp: new Date().toISOString(),
         });
 
@@ -899,23 +910,39 @@ const Chat = () => {
   };
 
   const handleChatChange = (newChat) => {
-    if (currentChat !== newChat) {
-      setCurrentChat(newChat);
-      currentChatRef.current = newChat; // Update the ref immediately
-      setMessages([]); // Clear previous messages
-    }
+    console.log(`🔄 Channel switch requested: ${currentChat} → ${newChat}`);
 
-    // Always send a request to fetch history, even if already in the same chatroom
+    // Update both state and ref immediately for synchronization
+    setCurrentChat(newChat);
+    currentChatRef.current = newChat;
+
+    // Clear messages when switching channels
+    setMessages([]);
+
+    // Send WebSocket requests for channel switching
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      console.log(`Switching to chatroom: ${newChat}`);
+      console.log(`📡 Switching to chatroom: ${newChat}`);
+
+      // Send switch_chatroom request
       socketRef.current.send(
-        JSON.stringify({ type: "switch_chatroom", chatroom: newChat })
+        JSON.stringify({
+          type: "switch_chatroom",
+          chatroom: newChat,
+          username: localStorage.getItem("username")
+        })
       );
+
+      // Fetch history for the new channel
       socketRef.current.send(
-        JSON.stringify({ type: "fetch_history", chatroom: newChat })
+        JSON.stringify({
+          type: "fetch_history",
+          chatroom: newChat
+        })
       );
+
+      console.log(`📚 Requested history for channel: ${newChat}`);
     } else {
-      console.error("WebSocket is not open. Unable to switch chatrooms.");
+      console.error("❌ WebSocket is not open. Unable to switch chatrooms.");
       toast.error("Unable to switch chatrooms. WebSocket is not connected.");
     }
   };
@@ -956,7 +983,7 @@ const Chat = () => {
       socketRef.current.send(
         JSON.stringify({
           type: "typing_status",
-          chatroom: currentChat,
+          chatroom: currentChatRef.current, // Use currentChatRef for consistency
           is_typing: true,
         })
       );
@@ -971,7 +998,7 @@ const Chat = () => {
         socketRef.current?.send(
           JSON.stringify({
             type: "typing_status",
-            chatroom: currentChat,
+            chatroom: currentChatRef.current, // Use currentChatRef for consistency
             is_typing: false,
           })
         );

@@ -1,78 +1,142 @@
-.App {
-  text-align: center;
-}
-
-/* Dark modern UI */
-.App-header {
-  background-color: #121212; /* Deep dark gray */
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(12px + 2vmin);
-  color: white;
-  font-weight: 500;
-}
-
-/* Customize toast background */
-.Toastify__toast {
-  background: #2e2e2e !important; /* Dark gray */
-  color: white !important; /* White text */
-}
-
-/* Customize progress bar */
-.Toastify__progress-bar {
-  background: #ff1ee5 !important;
-}
-
-/* Improve button styles */
-button {
-  background-color: #ff1ee5; /* Bright modern blue */
-  color: white;
-  border: none;
-  padding: 12px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: 0.3s ease;
-  font-size: 16px;
-  transition: background-color 0.3s ease-in-out;
-}
-
-button:hover {
-  background-color: #c116ad;
-}
-
-/* Modern text input */
-input {
-  background: #2a2a2a;
-  border: 1px solid #444;
-  color: white;
-  padding: 10px;
-  border-radius: 5px;
-  font-size: 16px;
-}
-
-/* Add smooth transitions */
+/* Global Styles */
 * {
-  transition: all 0.3s ease-in-out;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #0f0f23;
+  color: #ffffff;
+  overflow-x: hidden;
 }
 
 .app-container {
-  text-align: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+  position: relative;
 }
 
-.app-header {
-  padding: 20px;
-  color: white;
+.app-container::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -1;
 }
 
-.app-header h1 {
-  font-size: 2.5rem;
-  margin: 0;
+/* Toast Customization */
+.Toastify__toast {
+  background: #1a1a2e !important;
+  color: #ffffff !important;
+  border: 1px solid #27272a !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1) !important;
 }
 
-.app-header p {
-  font-size: 1.2rem;
-  margin: 0;
+.Toastify__toast--success {
+  border-color: #10b981 !important;
+}
+
+.Toastify__toast--error {
+  border-color: #ef4444 !important;
+}
+
+.Toastify__toast--warning {
+  border-color: #f59e0b !important;
+}
+
+.Toastify__toast--info {
+  border-color: #06b6d4 !important;
+}
+
+.Toastify__progress-bar {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6) !important;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Selection Styling */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: #ffffff;
+}
+
+/* Focus Styles */
+button:focus,
+input:focus,
+textarea:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* Animation Classes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.pulse {
+  animation: pulse 2s infinite;
 }
